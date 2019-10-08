@@ -65,6 +65,7 @@ namespace ICSharpCode.ILSpy.TextView
 		readonly UIElementGenerator uiElementGenerator;
 		List<VisualLineElementGenerator> activeCustomElementGenerators = new List<VisualLineElementGenerator>();
 		RichTextColorizer activeRichTextColorizer;
+		BracketHighlightRenderer bracketHighlightRenderer;
 		FoldingManager foldingManager;
 		ILSpyTreeNode[] decompiledNodes;
 		
@@ -103,12 +104,14 @@ namespace ICSharpCode.ILSpy.TextView
 			this.referenceElementGenerator = new ReferenceElementGenerator(this.JumpToReference, this.IsLink);
 			textEditor.TextArea.TextView.ElementGenerators.Add(referenceElementGenerator);
 			this.uiElementGenerator = new UIElementGenerator();
+			this.bracketHighlightRenderer = new BracketHighlightRenderer(textEditor.TextArea.TextView);
 			textEditor.TextArea.TextView.ElementGenerators.Add(uiElementGenerator);
 			textEditor.Options.RequireControlModifierForHyperlinkClick = false;
 			textEditor.TextArea.TextView.MouseHover += TextViewMouseHover;
 			textEditor.TextArea.TextView.MouseHoverStopped += TextViewMouseHoverStopped;
 			textEditor.TextArea.PreviewMouseDown += TextAreaMouseDown;
 			textEditor.TextArea.PreviewMouseUp += TextAreaMouseUp;
+			textEditor.TextArea.Caret.PositionChanged += HighlightBrackets;
 			textEditor.SetBinding(Control.FontFamilyProperty, new Binding { Source = DisplaySettingsPanel.CurrentDisplaySettings, Path = new PropertyPath("SelectedFont") });
 			textEditor.SetBinding(Control.FontSizeProperty, new Binding { Source = DisplaySettingsPanel.CurrentDisplaySettings, Path = new PropertyPath("SelectedFontSize") });
 			textEditor.SetBinding(TextEditor.WordWrapProperty, new Binding { Source = DisplaySettingsPanel.CurrentDisplaySettings, Path = new PropertyPath("EnableWordWrap") });
@@ -242,6 +245,18 @@ namespace ICSharpCode.ILSpy.TextView
 				// ignore
 			}
 			return renderer.CreateTextBlock();
+		}
+		#endregion
+
+		#region Highlight brackets
+		void HighlightBrackets(object sender, EventArgs e)
+		{
+			if (DisplaySettingsPanel.CurrentDisplaySettings.HighlightMatchingBraces) {
+				var result = MainWindow.Instance.CurrentLanguage.BracketSearcher.SearchBracket(textEditor.Document, textEditor.CaretOffset);
+				bracketHighlightRenderer.SetHighlight(result);
+			} else {
+				bracketHighlightRenderer.SetHighlight(null);
+			}
 		}
 		#endregion
 
@@ -381,6 +396,8 @@ namespace ICSharpCode.ILSpy.TextView
 			references = textOutput.References;
 			definitionLookup = textOutput.DefinitionLookup;
 			textEditor.SyntaxHighlighting = highlighting;
+			textEditor.Options.EnableEmailHyperlinks = textOutput.EnableHyperlinks;
+			textEditor.Options.EnableHyperlinks = textOutput.EnableHyperlinks;
 			if (activeRichTextColorizer != null)
 				textEditor.TextArea.TextView.LineTransformers.Remove(activeRichTextColorizer);
 			if (textOutput.HighlightingModel != null) {
@@ -410,6 +427,11 @@ namespace ICSharpCode.ILSpy.TextView
 				}
 				foldingManager = FoldingManager.Install(textEditor.TextArea);
 				foldingManager.UpdateFoldings(textOutput.Foldings.OrderBy(f => f.StartOffset), -1);
+				Debug.WriteLine("  Updating folding: {0}", w.Elapsed); w.Restart();
+			} else if (highlighting?.Name == "XML") {
+				foldingManager = FoldingManager.Install(textEditor.TextArea);
+				var foldingStrategy = new XmlFoldingStrategy();
+				foldingStrategy.UpdateFoldings(foldingManager, textEditor.Document);
 				Debug.WriteLine("  Updating folding: {0}", w.Elapsed); w.Restart();
 			}
 		}
@@ -559,7 +581,7 @@ namespace ICSharpCode.ILSpy.TextView
 			output.WriteLine();
 			if (wasNormalLimit) {
 				output.AddButton(
-					Images.ViewCode, "Display Code",
+					Images.ViewCode, Properties.Resources.DisplayCode,
 					delegate {
 						DoDecompile(context, ExtendedOutputLengthLimit).HandleExceptions();
 					});
@@ -567,7 +589,7 @@ namespace ICSharpCode.ILSpy.TextView
 			}
 			
 			output.AddButton(
-				Images.Save, "Save Code",
+				Images.Save, Properties.Resources.SaveCode,
 				delegate {
 					SaveToDisk(context.Language, context.TreeNodes, context.Options);
 				});
@@ -588,7 +610,7 @@ namespace ICSharpCode.ILSpy.TextView
 					foreach (var r in references) {
 						if (reference.Equals(r.Reference)) {
 							var mark = textMarkerService.Create(r.StartOffset, r.Length);
-							mark.BackgroundColor = r.IsLocalTarget ? Colors.LightSeaGreen : Colors.GreenYellow;
+							mark.BackgroundColor = r.IsDefinition ? Colors.LightSeaGreen : Colors.GreenYellow;
 							localReferenceMarks.Add(mark);
 						}
 					}
@@ -631,13 +653,14 @@ namespace ICSharpCode.ILSpy.TextView
 				var referenceSegment = GetReferenceSegmentAtMousePosition();
 				if (referenceSegment == null) {
 					ClearLocalReferenceMarks();
-				} else {
-					JumpToReference(referenceSegment);
+				} else if (referenceSegment.IsLocal || !referenceSegment.IsDefinition) {
 					textEditor.TextArea.ClearSelection();
+					// cancel mouse selection to avoid AvalonEdit selecting between the new
+					// cursor position and the mouse position.
+					textEditor.TextArea.MouseSelectionMode = MouseSelectionMode.None;
+
+					JumpToReference(referenceSegment);
 				}
-				// cancel mouse selection to avoid AvalonEdit selecting between the new
-				// cursor position and the mouse position.
-				textEditor.TextArea.MouseSelectionMode = MouseSelectionMode.None;
 			}
 		}
 		
@@ -654,7 +677,7 @@ namespace ICSharpCode.ILSpy.TextView
 		/// </summary>
 		bool IsLink(ReferenceSegment referenceSegment)
 		{
-			return true;
+			return referenceSegment.IsLocal || !referenceSegment.IsDefinition;
 		}
 		#endregion
 		
@@ -669,7 +692,7 @@ namespace ICSharpCode.ILSpy.TextView
 			
 			SaveFileDialog dlg = new SaveFileDialog();
 			dlg.DefaultExt = language.FileExtension;
-			dlg.Filter = language.Name + "|*" + language.FileExtension + "|All Files|*.*";
+			dlg.Filter = language.Name + "|*" + language.FileExtension + Properties.Resources.AllFiles;
 			dlg.FileName = CleanUpName(treeNodes.First().ToString()) + language.FileExtension;
 			if (dlg.ShowDialog() == true) {
 				SaveToDisk(new DecompilationContext(language, treeNodes.ToArray(), options), dlg.FileName);
@@ -725,7 +748,7 @@ namespace ICSharpCode.ILSpy.TextView
 						AvalonEditTextOutput output = new AvalonEditTextOutput();
 						output.WriteLine("Decompilation complete in " + stopwatch.Elapsed.TotalSeconds.ToString("F1") + " seconds.");
 						output.WriteLine();
-						output.AddButton(null, "Open Explorer", delegate { Process.Start("explorer", "/select,\"" + fileName + "\""); });
+						output.AddButton(null, Properties.Resources.OpenExplorer, delegate { Process.Start("explorer", "/select,\"" + fileName + "\""); });
 						output.WriteLine();
 						tcs.SetResult(output);
 					} catch (OperationCanceledException) {

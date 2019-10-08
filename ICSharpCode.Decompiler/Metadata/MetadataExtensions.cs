@@ -49,7 +49,7 @@ namespace ICSharpCode.Decompiler.Metadata
 			return publicKeyTokenBytes.TakeLast(8).Reverse().ToHexString(8);
 		}
 
-		public static string GetFullAssemblyName(this MetadataReader reader)
+		public static string GetPublicKeyToken(this MetadataReader reader)
 		{
 			if (!reader.IsAssembly)
 				return string.Empty;
@@ -59,6 +59,15 @@ namespace ICSharpCode.Decompiler.Metadata
 				// AssemblyFlags.PublicKey does not apply to assembly definitions
 				publicKey = CalculatePublicKeyToken(asm.PublicKey, reader);
 			}
+			return publicKey;
+		}
+
+		public static string GetFullAssemblyName(this MetadataReader reader)
+		{
+			if (!reader.IsAssembly)
+				return string.Empty;
+			var asm = reader.GetAssemblyDefinition();
+			string publicKey = reader.GetPublicKeyToken();
 			return $"{reader.GetString(asm.Name)}, " +
 				$"Version={asm.Version}, " +
 				$"Culture={(asm.Culture.IsNil ? "neutral" : reader.GetString(asm.Culture))}, " +
@@ -101,24 +110,26 @@ namespace ICSharpCode.Decompiler.Metadata
 			}
 		}
 
-		public static string ToILNameString(this FullTypeName typeName)
+		public static string ToILNameString(this FullTypeName typeName, bool omitGenerics = false)
 		{
 			string name;
 			if (typeName.IsNested) {
 				name = typeName.Name;
-				int localTypeParameterCount = typeName.GetNestedTypeAdditionalTypeParameterCount(typeName.NestingLevel - 1);
-				if (localTypeParameterCount > 0)
-					name += "`" + localTypeParameterCount;
+				if (!omitGenerics) {
+					int localTypeParameterCount = typeName.GetNestedTypeAdditionalTypeParameterCount(typeName.NestingLevel - 1);
+					if (localTypeParameterCount > 0)
+						name += "`" + localTypeParameterCount;
+				}
 				name = Disassembler.DisassemblerHelpers.Escape(name);
-				return $"{typeName.GetDeclaringType().ToILNameString()}/{name}";
+				return $"{typeName.GetDeclaringType().ToILNameString(omitGenerics)}/{name}";
 			}
 			if (!string.IsNullOrEmpty(typeName.TopLevelTypeName.Namespace)) {
 				name = $"{typeName.TopLevelTypeName.Namespace}.{typeName.Name}";
-				if (typeName.TypeParameterCount > 0)
+				if (!omitGenerics && typeName.TypeParameterCount > 0)
 					name += "`" + typeName.TypeParameterCount;
 			} else {
 				name = typeName.Name;
-				if (typeName.TypeParameterCount > 0)
+				if (!omitGenerics && typeName.TypeParameterCount > 0)
 					name += "`" + typeName.TypeParameterCount;
 			}
 			return Disassembler.DisassemblerHelpers.Escape(name);
@@ -149,6 +160,10 @@ namespace ICSharpCode.Decompiler.Metadata
 		/// that only mention built-in types.
 		/// </summary>
 		public static ICustomAttributeTypeProvider<IType> MinimalAttributeTypeProvider {
+			get => minimalCorlibTypeProvider;
+		}
+
+		public static ISignatureTypeProvider<IType, TypeSystem.GenericContext> MinimalSignatureTypeProvider {
 			get => minimalCorlibTypeProvider;
 		}
 

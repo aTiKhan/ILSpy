@@ -101,6 +101,7 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 			public IdentifierExpression FirstUse;
 
 			public VariableToDeclare ReplacementDueToCollision;
+			public bool InvolvedInCollision;
 			public bool RemovedDueToCollision => ReplacementDueToCollision != null;
 
 			public VariableToDeclare(ILVariable variable, bool defaultInitialization, InsertionPoint insertionPoint, IdentifierExpression firstUse, int sourceOrder)
@@ -158,6 +159,15 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 			return v.InsertionPoint.nextNode;
 		}
 
+		/// <summary>
+		/// Determines whether a variable was merged with other variables.
+		/// </summary>
+		public bool WasMerged(ILVariable variable)
+		{
+			VariableToDeclare v = variableDict[variable];
+			return v.InvolvedInCollision || v.RemovedDueToCollision;
+		}
+
 		public void ClearAnalysisResults()
 		{
 			variableDict.Clear();
@@ -170,16 +180,23 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 				if (!IsValidInStatementExpression(stmt.Expression)) {
 					// fetch ILFunction
 					var function = stmt.Ancestors.SelectMany(a => a.Annotations.OfType<ILFunction>()).First(f => f.Parent == null);
-					// assign result to dummy variable
-					var type = stmt.Expression.GetResolveResult().Type;
-					var v = function.RegisterVariable(
-						VariableKind.StackSlot,
-						type,
-						AssignVariableNames.GenerateVariableName(function, type, stmt.Expression.Annotations.OfType<ILInstruction>().Where(AssignVariableNames.IsSupportedInstruction).FirstOrDefault())
-					);
-					stmt.Expression = new AssignmentExpression(
-						new IdentifierExpression(v.Name).WithRR(new ILVariableResolveResult(v, v.Type)),
-						stmt.Expression.Detach());
+					// if possible use C# 7.0 discard-assignment
+					if (context.Settings.Discards && !ExpressionBuilder.HidesVariableWithName(function, "_")) {
+						stmt.Expression = new AssignmentExpression(
+							new IdentifierExpression("_"), // no ResolveResult
+							stmt.Expression.Detach());
+					} else {
+						// assign result to dummy variable
+						var type = stmt.Expression.GetResolveResult().Type;
+						var v = function.RegisterVariable(
+							VariableKind.StackSlot,
+							type,
+							AssignVariableNames.GenerateVariableName(function, type, stmt.Expression.Annotations.OfType<ILInstruction>().Where(AssignVariableNames.IsSupportedInstruction).FirstOrDefault())
+						);
+						stmt.Expression = new AssignmentExpression(
+							new IdentifierExpression(v.Name).WithRR(new ILVariableResolveResult(v, v.Type)),
+							stmt.Expression.Detach());
+					}
 				}
 			}
 		}
@@ -187,10 +204,10 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 		private static bool IsValidInStatementExpression(Expression expr)
 		{
 			switch (expr) {
-				case InvocationExpression ie:
-				case ObjectCreateExpression oce:
-				case AssignmentExpression ae:
-				case ErrorExpression ee:
+				case InvocationExpression _:
+				case ObjectCreateExpression _:
+				case AssignmentExpression _:
+				case ErrorExpression _:
 					return true;
 				case UnaryOperatorExpression uoe:
 					switch (uoe.Operator) {
@@ -249,12 +266,27 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 							newPoint = scopeTracking[startIndex + 1].InsertionPoint;
 						} else {
 							newPoint = new InsertionPoint { level = nodeLevel, nextNode = identExpr };
+							if (variable.HasInitialValue) {
+								// Uninitialized variables are logically initialized at the beginning of the function
+								// Because it's possible that the variable has a loop-carried dependency,
+								// declare it outside of any loops.
+								while (startIndex >= 0) {
+									if (scopeTracking[startIndex].Scope.EntryPoint.IncomingEdgeCount > 1) {
+										// declare variable outside of loop
+										newPoint = scopeTracking[startIndex].InsertionPoint;
+									} else if (scopeTracking[startIndex].Scope.Parent is ILFunction) {
+										// stop at beginning of function
+										break;
+									}
+									startIndex--;
+								}
+							}
 						}
 						VariableToDeclare v;
-						if (variableDict.TryGetValue(rr.Variable, out v)) {
+						if (variableDict.TryGetValue(variable, out v)) {
 							v.InsertionPoint = FindCommonParent(v.InsertionPoint, newPoint);
 						} else {
-							v = new VariableToDeclare(rr.Variable, rr.Variable.HasInitialValue,
+							v = new VariableToDeclare(variable, variable.HasInitialValue,
 								newPoint, identExpr, sourceOrder: variableDict.Count);
 							variableDict.Add(rr.Variable, v);
 						}
@@ -266,12 +298,13 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 			}
 		}
 
-		bool VariableNeedsDeclaration(VariableKind kind)
+		internal static bool VariableNeedsDeclaration(VariableKind kind)
 		{
 			switch (kind) {
 				case VariableKind.PinnedLocal:
 				case VariableKind.Parameter:
-				case VariableKind.Exception:
+				case VariableKind.ExceptionLocal:
+				case VariableKind.ExceptionStackSlot:
 				case VariableKind.UsingLocal:
 				case VariableKind.ForeachLocal:
 					return false;
@@ -358,6 +391,7 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 					Debug.Assert(point1.level == point2.level);
 					if (point1.nextNode.Parent == point2.nextNode.Parent) {
 						// We found a collision!
+						v.InvolvedInCollision = true;
 						prev.ReplacementDueToCollision = v;
 						// Continue checking other entries in multiDict against the new position of `v`.
 						if (prev.SourceOrder < v.SourceOrder) {
@@ -412,6 +446,9 @@ namespace ICSharpCode.Decompiler.CSharp.Transforms
 						type = new SimpleType("var");
 					} else {
 						type = context.TypeSystemAstBuilder.ConvertType(v.Type);
+					}
+					if (v.ILVariable.IsRefReadOnly && type is ComposedType composedType && composedType.HasRefSpecifier) {
+						composedType.HasReadOnlySpecifier = true;
 					}
 					var vds = new VariableDeclarationStatement(type, v.Name, assignment.Right.Detach());
 					var init = vds.Variables.Single();

@@ -82,7 +82,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				ConditionDetection.InvertIf(loopBody, ifInstruction, context);
 			}
 			
-			context.Step("Transform to while (condition) loop", loop);
+			context.Step("Transform to while (condition) loop: " + loop.EntryPoint.Label, loop);
 			loop.Kind = ContainerKind.While;
 			//invert comparison
 			ifInstruction.Condition = Comp.LogicNot(ifInstruction.Condition);
@@ -150,7 +150,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 			// not a do-while loop, exit.
 			if (conditions == null || conditions.Count == 0)
 				return false;
-			context.Step("Transform to do-while loop", loop);
+			context.Step("Transform to do-while loop: " + loop.EntryPoint.Label, loop);
 			Block conditionBlock;
 			// first we remove all extracted instructions from the original block.
 			var originalBlock = (Block)exit.Parent;
@@ -186,9 +186,9 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 			}
 			// combine all conditions and the exit instruction into one IfInstruction:
 			IfInstruction condition = null;
-			conditionBlock.AddILRange(exit.ILRange);
+			conditionBlock.AddILRange(exit);
 			foreach (var inst in conditions) {
-				conditionBlock.AddILRange(inst.ILRange);
+				conditionBlock.AddILRange(inst);
 				if (condition == null) {
 					condition = inst;
 					if (swap) {
@@ -358,7 +358,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				// - increment block
 				if (incrementBlock.Instructions.Count <= 1 || loop.Blocks.Count < 3)
 					return false;
-				context.Step("Transform to for loop", loop);
+				context.Step("Transform to for loop: " + loop.EntryPoint.Label, loop);
 				// move the block to the end of the loop:
 				loop.Blocks.MoveElementToEnd(incrementBlock);
 				loop.Kind = ContainerKind.For;
@@ -398,7 +398,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				}
 				if (numberOfConditions == 0)
 					return false;
-				context.Step("Transform to for loop", loop);
+				context.Step("Transform to for loop: " + loop.EntryPoint.Label, loop);
 				// split condition block:
 				whileCondition.ReplaceWith(forCondition);
 				ExpressionTransforms.RunOnSingleStatement(forCondition, context);
@@ -414,7 +414,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				// move the increment instruction:
 				newIncremenBlock.Instructions.Add(secondToLast);
 				newIncremenBlock.Instructions.Add(last);
-				newIncremenBlock.AddILRange(secondToLast.ILRange);
+				newIncremenBlock.AddILRange(secondToLast);
 				whileLoopBody.Instructions.RemoveRange(secondToLastIndex, 2);
 				whileLoopBody.Instructions.Add(new Branch(newIncremenBlock));
 				// complete transform.
@@ -434,18 +434,18 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 
 		/// <summary>
 		/// Returns true if the instruction is stloc v(add(ldloc v, arg))
-		/// or stloc v(compound.assign(ldloc v, arg))
+		/// or compound.assign(ldloca v, arg)
 		/// </summary>
 		public static bool MatchIncrement(ILInstruction inst, out ILVariable variable)
 		{
-			if (!inst.MatchStLoc(out variable, out var value))
-				return false;
-			if (!value.MatchBinaryNumericInstruction(BinaryNumericOperator.Add, out var left, out var right)) {
-				if (value is CompoundAssignmentInstruction cai) {
-					left = cai.Target;
-				} else return false;
+			if (inst.MatchStLoc(out variable, out var value)) {
+				if (value.MatchBinaryNumericInstruction(BinaryNumericOperator.Add, out var left, out var right)) {
+					return left.MatchLdLoc(variable);
+				}
+			} else if (inst is CompoundAssignmentInstruction cai) {
+				return cai.TargetKind == CompoundTargetKind.Address && cai.Target.MatchLdLoca(out variable);
 			}
-			return left.MatchLdLoc(variable);
+			return false;
 		}
 
 		/// <summary>

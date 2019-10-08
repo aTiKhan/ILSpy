@@ -76,6 +76,8 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				return false;
 			if (!(storeInst.Value.MatchLdNull() || CheckResourceType(storeInst.Variable.Type)))
 				return false;
+			if (storeInst.Variable.Kind != VariableKind.Local)
+				return false;
 			if (storeInst.Variable.LoadInstructions.Any(ld => !ld.IsDescendantOf(tryFinally)))
 				return false;
 			if (storeInst.Variable.AddressInstructions.Any(la => !la.IsDescendantOf(tryFinally) || (la.IsDescendantOf(tryFinally.TryBlock) && !ILInlining.IsUsedAsThisPointerInCall(la))))
@@ -87,7 +89,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 			context.Step("UsingTransform", tryFinally);
 			storeInst.Variable.Kind = VariableKind.UsingLocal;
 			block.Instructions.RemoveAt(i);
-			block.Instructions[i - 1] = new UsingInstruction(storeInst.Variable, storeInst.Value, tryFinally.TryBlock) { ILRange = storeInst.ILRange };
+			block.Instructions[i - 1] = new UsingInstruction(storeInst.Variable, storeInst.Value, tryFinally.TryBlock).WithILRange(storeInst);
 			return true;
 		}
 
@@ -125,6 +127,8 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				return false;
 			if (!(storeInst.Value.MatchLdNull() || CheckResourceType(storeInst.Variable.Type)))
 				return false;
+			if (storeInst.Variable.Kind != VariableKind.Local)
+				return false;
 			if (storeInst.Variable.LoadInstructions.Any(ld => !ld.IsDescendantOf(tryFinally)))
 				return false;
 			if (storeInst.Variable.AddressInstructions.Any(la => !la.IsDescendantOf(tryFinally) || (la.IsDescendantOf(tryFinally.TryBlock) && !ILInlining.IsUsedAsThisPointerInCall(la))))
@@ -144,7 +148,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 		{
 			// non-generic IEnumerator does not implement IDisposable.
 			// This is a workaround for non-generic foreach.
-			if (type.IsKnownType(KnownTypeCode.IEnumerator))
+			if (type.IsKnownType(KnownTypeCode.IEnumerator) || type.GetAllBaseTypes().Any(b => b.IsKnownType(KnownTypeCode.IEnumerator)))
 				return true;
 			if (NullableType.GetUnderlyingType(type).GetAllBaseTypes().Any(b => b.IsKnownType(KnownTypeCode.IDisposable)))
 				return true;
@@ -220,7 +224,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 					return false;
 				var firstArg = callVirt.Arguments.FirstOrDefault();
 				if (!(firstArg.MatchUnboxAny(out var innerArg1, out var unboxType) && unboxType.IsKnownType(KnownTypeCode.IDisposable))) {
-					if (!firstArg.MatchAddressOf(out var innerArg2))
+					if (!firstArg.MatchAddressOf(out var innerArg2, out _))
 						return false;
 					return NullableLiftingTransform.MatchGetValueOrDefault(innerArg2, objVar)
 						|| (innerArg2 is NullableUnwrap unwrap

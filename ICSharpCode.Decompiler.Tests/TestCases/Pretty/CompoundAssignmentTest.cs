@@ -4562,9 +4562,9 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 			// same temporary. In order to inline the generated value-type temporary, we
 			// need to split it, even though it has the address taken for the ToString() call.
 			if (flag) {
-				strings[1] += chars[i].ToString();
+				strings[1] += chars[i];
 			} else {
-				strings[0] += chars[i].ToString();
+				strings[0] += chars[i];
 			}
 		}
 #endif
@@ -4576,5 +4576,194 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 			new CustomClass().StringProp += "a";
 			new CustomClass().StringProp += 1;
 		}
+
+		public uint PreIncrementIndexer(string name)
+		{
+			return ++M()[name];
+		}
+
+		public int PreIncrementByRef(ref int i)
+		{
+			return ++i;
+		}
+
+		public unsafe int PreIncrementByPointer()
+		{
+			return ++(*GetPointer());
+		}
+
+		public unsafe int PreIncrementOfPointer(int* ptr)
+		{
+			return *(++ptr);
+		}
+
+		public int PreIncrement2DArray()
+		{
+			return ++Array()[1, 2];
+		}
+
+		public int CompoundAssignInstanceField()
+		{
+			return M().Field *= 10;
+		}
+
+		public int CompoundAssignInstanceProperty()
+		{
+			return M().Property *= 10;
+		}
+
+		public int CompoundAssignStaticField()
+		{
+			return StaticField ^= 100;
+		}
+
+		public int CompoundAssignStaticProperty()
+		{
+			return StaticProperty &= 10;
+		}
+
+		public int CompoundAssignArrayElement1(int[] array, int pos)
+		{
+			return array[pos] *= 10;
+		}
+
+		public int CompoundAssignArrayElement2(int[] array)
+		{
+			return array[Environment.TickCount] *= 10;
+		}
+
+		public uint CompoundAssignIndexer(string name)
+		{
+			return M()[name] -= 2u;
+		}
+
+		public uint CompoundAssignIndexerComplexIndex(string name)
+		{
+			return M()[ToString()] -= 2u;
+		}
+
+		public int CompoundAssignIncrement2DArray()
+		{
+			return Array()[1, 2] %= 10;
+		}
+
+		public int CompoundAssignByRef(ref int i)
+		{
+			return i <<= 2;
+		}
+
+		public unsafe int* CompoundAssignOfPointer(int* ptr)
+		{
+			return ptr += 10;
+		}
+
+		public unsafe double CompoundAssignByPointer(double* ptr)
+		{
+			return *ptr /= 1.5;
+		}
+
+		public void CompoundAssignEnum()
+		{
+			enumField |= MyEnum.Two;
+			enumField &= ~MyEnum.Four;
+		}
+
+		public int PostIncrementInAddition(int i, int j)
+		{
+			return i++ + j;
+		}
+
+		public void PostIncrementInlineLocalVariable(Func<int, int> f)
+		{
+			int num = 0;
+			f(num++);
+		}
+
+		public int PostDecrementArrayElement(int[] array, int pos)
+		{
+			return array[pos]--;
+		}
+
+		public uint PostIncrementIndexer(string name)
+		{
+			return M()[name]++;
+		}
+
+#if false
+		public unsafe int PostIncrementOfPointer(int* ptr)
+		{
+			return *(ptr++);
+		}
+#endif
+
+		public int PostDecrementInstanceField()
+		{
+			return M().Field--;
+		}
+
+		public int PostDecrementInstanceProperty()
+		{
+			return M().Property--;
+		}
+
+		public int PostIncrement2DArray()
+		{
+			return Array()[StaticField, StaticProperty]++;
+		}
+
+		public int PostIncrementByRef(ref int i)
+		{
+			return i++;
+		}
+
+		public unsafe int PostIncrementByPointer()
+		{
+			return (*GetPointer())++;
+		}
+
+		public void Issue1552Pre(CustomStruct a, CustomStruct b)
+		{
+			CustomStruct customStruct = a + b;
+			Console.WriteLine(++customStruct);
+		}
+
+		public void Issue1552Stmt(CustomStruct a, CustomStruct b)
+		{
+			CustomStruct customStruct = a + b;
+			++customStruct;
+		}
+
+		public void Issue1552StmtUseLater(CustomStruct a, CustomStruct b)
+		{
+			CustomStruct lhs = a + b;
+			++lhs;
+			Console.WriteLine();
+			Console.WriteLine(lhs * b);
+		}
+
+		public void Issue1552Decimal(decimal a)
+		{
+			// Legacy csc compiles this using op_Increment,
+			// ensure we don't misdetect this as an invalid pre-increment "++(a * 10m)"
+			Console.WriteLine(a * 10m + 1m);
+		}
+
+#if !(ROSLYN && OPT)
+		// Roslyn opt no longer has a detectable post-increment pattern
+		// due to optimizing out some of the stores.
+		// Our emitted code is valid but has some additional temporaries.
+		public void Issue1552Post(CustomStruct a, CustomStruct b)
+		{
+			CustomStruct customStruct = a + b;
+			Console.WriteLine(customStruct++);
+		}
+
+		public void Issue1552StmtTwice(CustomStruct a, CustomStruct b)
+		{
+			CustomStruct customStruct = a + b;
+			++customStruct;
+			++customStruct;
+		}
+#endif
 	}
 }

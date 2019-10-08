@@ -20,7 +20,7 @@ using System;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Windows.Controls;
-
+using System.Windows.Media;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.ILSpy.TextView;
 using ICSharpCode.TreeView;
@@ -78,7 +78,7 @@ namespace ICSharpCode.ILSpy
 			if (textView != null)
 				reference = textView.GetReferenceSegmentAtMousePosition();
 			else if (listBox?.SelectedItem is SearchResult result)
-				reference = new ReferenceSegment { Reference = result.Member };
+				reference = new ReferenceSegment { Reference = result.Reference };
 			else
 				reference = null;
 			var position = textView != null ? textView.GetPositionFromMousePosition() : null;
@@ -219,13 +219,13 @@ namespace ICSharpCode.ILSpy
 							needSeparatorForCategory = false;
 						}
 						MenuItem menuItem = new MenuItem();
-						menuItem.Header = entryPair.Metadata.Header;
+						menuItem.Header = MainWindow.GetResourceString( entryPair.Metadata.Header);
 						menuItem.InputGestureText = entryPair.Metadata.InputGestureText;
 						if (!string.IsNullOrEmpty(entryPair.Metadata.Icon)) {
 							menuItem.Icon = new Image {
 								Width = 16,
 								Height = 16,
-								Source = Images.LoadImage(entry, entryPair.Metadata.Icon)
+								Source = Images.Load(entryPair.Value, entryPair.Metadata.Icon)
 							};
 						}
 						if (entryPair.Value.IsEnabled(context)) {

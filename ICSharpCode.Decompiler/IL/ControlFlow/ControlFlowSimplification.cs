@@ -15,6 +15,7 @@
 // FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -45,6 +46,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				context.CancellationToken.ThrowIfCancellationRequested();
 
 				RemoveNopInstructions(block);
+				RemoveDeadStackStores(block, aggressive: context.Settings.RemoveDeadStores);
 
 				InlineVariableInReturnBlock(block, context);
 				// 1st pass SimplifySwitchInstruction before SimplifyBranchChains()
@@ -60,12 +62,41 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 			// Move ILRanges of special nop instructions to the previous non-nop instruction.
 			for (int i = block.Instructions.Count - 1; i > 0; i--) {
 				if (block.Instructions[i] is Nop nop && nop.Kind == NopKind.Pop) {
-					block.Instructions[i - 1].AddILRange(nop.ILRange);
+					block.Instructions[i - 1].AddILRange(nop);
 				}
 			}
 
 			// Remove 'nop' instructions
 			block.Instructions.RemoveAll(inst => inst.OpCode == OpCode.Nop);
+		}
+
+		private void RemoveDeadStackStores(Block block, bool aggressive)
+		{
+			// Previously copy propagation did this;
+			// ideally the ILReader would already do this,
+			// for now do this here (even though it's not control-flow related).
+			for (int i = block.Instructions.Count - 1; i >= 0; i--) {
+				if (block.Instructions[i] is StLoc stloc && stloc.Variable.IsSingleDefinition && stloc.Variable.LoadCount == 0 && stloc.Variable.Kind == VariableKind.StackSlot) {
+					if (aggressive ? SemanticHelper.IsPure(stloc.Value.Flags) : IsSimple(stloc.Value)) {
+						Debug.Assert(SemanticHelper.IsPure(stloc.Value.Flags));
+						block.Instructions.RemoveAt(i++);
+					} else {
+						stloc.Value.AddILRange(stloc);
+						stloc.ReplaceWith(stloc.Value);
+					}
+				}
+			}
+
+			bool IsSimple(ILInstruction inst)
+			{
+				switch (inst.OpCode) {
+					case OpCode.LdLoc:
+					case OpCode.LdStr: // C# 1.0 compiler sometimes emits redundant ldstr in switch-on-string pattern
+						return true;
+					default:
+						return false;
+				}
+			}
 		}
 
 		void InlineVariableInReturnBlock(Block block, ILTransformContext context)
@@ -82,8 +113,8 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				if (value.MatchLdLoc(out ILVariable v)
 					&& v.IsSingleDefinition && v.LoadCount == 1 && block.Instructions[0].MatchStLoc(v, out ILInstruction inst)) {
 					context.Step("Inline variable in return block", block);
-					inst.AddILRange(ret.Value.ILRange);
-					inst.AddILRange(block.Instructions[0].ILRange);
+					inst.AddILRange(ret.Value);
+					inst.AddILRange(block.Instructions[0]);
 					ret.Value = inst;
 					block.Instructions.RemoveAt(0);
 				}
@@ -106,7 +137,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 					context.Step("Simplify branch to branch", branch);
 					var nextBranch = (Branch)targetBlock.Instructions[0];
 					branch.TargetBlock = nextBranch.TargetBlock;
-					branch.AddILRange(nextBranch.ILRange);
+					branch.AddILRange(nextBranch);
 					if (targetBlock.IncomingEdgeCount == 0)
 						targetBlock.Instructions.Clear(); // mark the block for deletion
 					targetBlock = branch.TargetBlock;
@@ -133,8 +164,8 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 					context.Step("Replace branch to leave with leave", branch);
 					// Replace branches to 'leave' instruction with the leave instruction
 					var leave2 = leave.Clone();
-					if (!branch.ILRange.IsEmpty) // use the ILRange of the branch if possible
-						leave2.ILRange = branch.ILRange;
+					if (!branch.HasILRange) // use the ILRange of the branch if possible
+						leave2.AddILRange(branch);
 					branch.ReplaceWith(leave2);
 				}
 				if (targetBlock.IncomingEdgeCount == 0)
@@ -158,9 +189,6 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				}
 				// Remove return blocks that are no longer reachable:
 				container.Blocks.RemoveAll(b => b.IncomingEdgeCount == 0 && b.Instructions.Count == 0);
-				if (context.Settings.RemoveDeadCode) {
-					container.SortBlocks(deleteUnreachableBlocks: true);
-				}
 			}
 		}
 
@@ -186,13 +214,13 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				return false; // don't inline block into itself
 			context.Step("CombineBlockWithNextBlock", br);
 			var targetBlock = br.TargetBlock;
-			if (targetBlock.ILRange.Start < block.ILRange.Start && IsDeadTrueStore(block)) {
+			if (targetBlock.StartILOffset < block.StartILOffset && IsDeadTrueStore(block)) {
 				// The C# compiler generates a dead store for the condition of while (true) loops.
 				block.Instructions.RemoveRange(block.Instructions.Count - 3, 2);
 			}
 
-			if (block.ILRange.IsEmpty)
-				block.ILRange = targetBlock.ILRange;
+			if (block.HasILRange)
+				block.AddILRange(targetBlock);
 
 			block.Instructions.Remove(br);
 			block.Instructions.AddRange(targetBlock.Instructions);

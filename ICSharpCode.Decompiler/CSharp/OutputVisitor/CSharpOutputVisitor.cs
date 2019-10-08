@@ -292,16 +292,19 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 			return callChainLength;
 		}
 
-		protected virtual void InsertNewLineWhenInMethodCallChain(MemberReferenceExpression expr)
+		protected virtual bool InsertNewLineWhenInMethodCallChain(MemberReferenceExpression expr)
 		{
 			int callChainLength = GetCallChainLengthLimited(expr);
-			if (callChainLength < 3) return;
+			if (callChainLength < 3) return false;
+			if (expr.GetParent(n => n is Statement || n is LambdaExpression || n is InterpolatedStringContent) is InterpolatedStringContent)
+				return false;
 			if (callChainLength == 3)
 				writer.Indent();
 			writer.NewLine();
 			
 			isAtStartOfLine = true;
 			isAfterSpace = false;
+			return true;
 		}
 		
 		protected virtual void OpenBrace(BraceStyle style)
@@ -899,10 +902,13 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 		{
 			StartNode(memberReferenceExpression);
 			memberReferenceExpression.Target.AcceptVisitor(this);
-			InsertNewLineWhenInMethodCallChain(memberReferenceExpression);
+			bool insertedNewLine = InsertNewLineWhenInMethodCallChain(memberReferenceExpression);
 			WriteToken(Roles.Dot);
 			WriteIdentifier(memberReferenceExpression.MemberNameToken);
 			WriteTypeArguments(memberReferenceExpression.TypeArguments);
+			if (insertedNewLine && !(memberReferenceExpression.Parent is InvocationExpression)) {
+				writer.Unindent();
+			}
 			EndNode(memberReferenceExpression);
 		}
 		
@@ -1120,7 +1126,8 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 		{
 			return op == UnaryOperatorType.PostIncrement
 				|| op == UnaryOperatorType.PostDecrement
-				|| op == UnaryOperatorType.NullConditional;
+				|| op == UnaryOperatorType.NullConditional
+				|| op == UnaryOperatorType.SuppressNullableWarning;
 		}
 
 		public virtual void VisitUncheckedExpression(UncheckedExpression uncheckedExpression)
@@ -1141,11 +1148,8 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 		public virtual void VisitQueryExpression(QueryExpression queryExpression)
 		{
 			StartNode(queryExpression);
-			bool indent = queryExpression.Parent is QueryClause && !(queryExpression.Parent is QueryContinuationClause);
-			if (indent) {
+			if (queryExpression.Role != QueryContinuationClause.PrecedingQueryRole)
 				writer.Indent();
-				NewLine();
-			}
 			bool first = true;
 			foreach (var clause in queryExpression.Clauses) {
 				if (first) {
@@ -1157,9 +1161,8 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 				}
 				clause.AcceptVisitor(this);
 			}
-			if (indent) {
+			if (queryExpression.Role != QueryContinuationClause.PrecedingQueryRole)
 				writer.Unindent();
-			}
 			EndNode(queryExpression);
 		}
 		
@@ -1310,10 +1313,15 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 			}
 			WriteCommaSeparatedList(attributeSection.Attributes);
 			WriteToken(Roles.RBracket);
-			if (attributeSection.Parent is ParameterDeclaration || attributeSection.Parent is TypeParameterDeclaration) {
-				Space();
-			} else {
-				NewLine();
+			switch (attributeSection.Parent) {
+				case ParameterDeclaration _:
+				case TypeParameterDeclaration _:
+				case ComposedType _:
+					Space();
+					break;
+				default:
+					NewLine();
+					break;
 			}
 			EndNode(attributeSection);
 		}
@@ -1880,6 +1888,25 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 			Semicolon();
 			EndNode(variableDeclarationStatement);
 		}
+
+		public virtual void VisitLocalFunctionDeclarationStatement(LocalFunctionDeclarationStatement localFunctionDeclarationStatement)
+		{
+			StartNode(localFunctionDeclarationStatement);
+
+			WriteModifiers(localFunctionDeclarationStatement.ModifierTokens);
+			localFunctionDeclarationStatement.ReturnType.AcceptVisitor(this);
+			Space();
+			WriteIdentifier(localFunctionDeclarationStatement.NameToken);
+			WriteTypeParameters(localFunctionDeclarationStatement.TypeParameters);
+			Space(policy.SpaceBeforeMethodDeclarationParentheses);
+			WriteCommaSeparatedListInParenthesis(localFunctionDeclarationStatement.Parameters, policy.SpaceWithinMethodDeclarationParentheses);
+			foreach (Constraint constraint in localFunctionDeclarationStatement.Constraints) {
+				constraint.AcceptVisitor(this);
+			}
+			WriteMethodBody(localFunctionDeclarationStatement.Body, policy.MethodBraceStyle);
+
+			EndNode(localFunctionDeclarationStatement);
+		}
 		
 		public virtual void VisitWhileStatement(WhileStatement whileStatement)
 		{
@@ -2100,15 +2127,24 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 			WriteKeyword(IndexerDeclaration.ThisKeywordRole);
 			Space(policy.SpaceBeforeMethodDeclarationParentheses);
 			WriteCommaSeparatedListInBrackets(indexerDeclaration.Parameters, policy.SpaceWithinMethodDeclarationParentheses);
-			OpenBrace(policy.PropertyBraceStyle);
-			// output get/set in their original order
-			foreach (AstNode node in indexerDeclaration.Children) {
-				if (node.Role == IndexerDeclaration.GetterRole || node.Role == IndexerDeclaration.SetterRole) {
-					node.AcceptVisitor(this);
+
+			if (indexerDeclaration.ExpressionBody.IsNull) {
+				OpenBrace(policy.PropertyBraceStyle);
+				// output get/set in their original order
+				foreach (AstNode node in indexerDeclaration.Children) {
+					if (node.Role == IndexerDeclaration.GetterRole || node.Role == IndexerDeclaration.SetterRole) {
+						node.AcceptVisitor(this);
+					}
 				}
+				CloseBrace(policy.PropertyBraceStyle);
+				NewLine();
+			} else {
+				Space();
+				WriteToken(Roles.Arrow);
+				Space();
+				indexerDeclaration.ExpressionBody.AcceptVisitor(this);
+				Semicolon();
 			}
-			CloseBrace(policy.PropertyBraceStyle);
-			NewLine();
 			EndNode(indexerDeclaration);
 		}
 		
@@ -2161,21 +2197,26 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 		{
 			StartNode(parameterDeclaration);
 			WriteAttributes(parameterDeclaration.Attributes);
+			if (parameterDeclaration.HasThisModifier) {
+				WriteKeyword(ParameterDeclaration.ThisModifierRole);
+				Space();
+			}
 			switch (parameterDeclaration.ParameterModifier) {
 				case ParameterModifier.Ref:
 					WriteKeyword(ParameterDeclaration.RefModifierRole);
+					Space();
 					break;
 				case ParameterModifier.Out:
 					WriteKeyword(ParameterDeclaration.OutModifierRole);
+					Space();
 					break;
 				case ParameterModifier.Params:
 					WriteKeyword(ParameterDeclaration.ParamsModifierRole);
-					break;
-				case ParameterModifier.This:
-					WriteKeyword(ParameterDeclaration.ThisModifierRole);
+					Space();
 					break;
 				case ParameterModifier.In:
 					WriteKeyword(ParameterDeclaration.InModifierRole);
+					Space();
 					break;
 			}
 			parameterDeclaration.Type.AcceptVisitor(this);
@@ -2313,8 +2354,16 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 		public virtual void VisitComposedType(ComposedType composedType)
 		{
 			StartNode(composedType);
+			if (composedType.Attributes.Any()) {
+				foreach (var attr in composedType.Attributes) {
+					attr.AcceptVisitor(this);
+				}
+			}
 			if (composedType.HasRefSpecifier) {
 				WriteKeyword(ComposedType.RefRole);
+			}
+			if (composedType.HasReadOnlySpecifier) {
+				WriteKeyword(ComposedType.ReadonlyRole);
 			}
 			composedType.BaseType.AcceptVisitor(this);
 			if (composedType.HasNullableSpecifier) {

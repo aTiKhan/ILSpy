@@ -107,7 +107,6 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				IncludeNestedContainers(loop);
 				// Try to extend the loop to reduce the number of exit points:
 				ExtendLoop(h, loop, out var exitPoint);
-				IncludeUnreachablePredecessors(loop);
 
 				// Sort blocks in the loop in reverse post-order to make the output look a bit nicer.
 				// (if the loop doesn't contain nested loops, this is a topological sort)
@@ -115,7 +114,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				Debug.Assert(loop[0] == h);
 				foreach (var node in loop) {
 					node.Visited = false; // reset visited flag so that we can find outer loops
-					Debug.Assert(h.Dominates(node) || !node.IsReachable, "The loop body must be dominated by the loop head");
+					Debug.Assert(h.Dominates(node), "The loop body must be dominated by the loop head");
 				}
 				ConstructLoop(loop, exitPoint);
 			}
@@ -142,7 +141,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 
 			void IncludeBlock(Block block)
 			{
-				if (block.Instructions[0] is BlockContainer nestedContainer) {
+				foreach (var nestedContainer in block.Instructions.OfType<BlockContainer>()) {
 					// Just in case the block has multiple nested containers (e.g. due to loop and switch),
 					// also check the entry point:
 					IncludeBlock(nestedContainer.EntryPoint);
@@ -150,7 +149,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 					// (the entry-point itself doesn't have a CFG node, because it's newly created by this transform)
 					for (int i = 1; i < nestedContainer.Blocks.Count; i++) {
 						var node = context.ControlFlowGraph.GetNode(nestedContainer.Blocks[i]);
-						Debug.Assert(loop[0].Dominates(node) || !node.IsReachable);
+						Debug.Assert(loop[0].Dominates(node));
 						if (!node.Visited) {
 							node.Visited = true;
 							loop.Add(node);
@@ -258,6 +257,22 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 						loop.Add(node);
 					}
 				}
+				// The loop/switch can only be entered through the entry point.
+				if (isSwitch) {
+					// In the case of a switch, false positives in the "continue;" detection logic
+					// can lead to falsely excludes some blocks from the body.
+					// Fix that by including all predecessors of included blocks.
+					Debug.Assert(loop[0] == loopHead);
+					for (int i = 1; i < loop.Count; i++) {
+						foreach (var p in loop[i].Predecessors) {
+							if (!p.Visited) {
+								p.Visited = true;
+								loop.Add(p);
+							}
+						}
+					}
+				}
+				Debug.Assert(loop.All(n => n == loopHead || n.Predecessors.All(p => p.Visited)));
 			} else {
 				// We are in case 2, but could not find a suitable exit point.
 				// Heuristically try to minimize the number of exit points
@@ -425,7 +440,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				return;
 
 			Block block = (Block)node.UserData;
-			if (block.ILRange.Start > exitPointILOffset
+			if (block.StartILOffset > exitPointILOffset
 				&& !HasReachableExit(node)
 				&& ((Block)node.UserData).Parent == currentBlockContainer)
 			{
@@ -440,7 +455,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				// that prevents us from finding a nice exit for the inner loops, causing
 				// unnecessary gotos.
 				exitPoint = node;
-				exitPointILOffset = block.ILRange.Start;
+				exitPointILOffset = block.StartILOffset;
 				return; // don't visit children, they are likely to have even later IL offsets and we'd end up
 				// moving almost all of the code into the loop.
 			}
@@ -458,7 +473,6 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 		/// or that leave the block Container.
 		/// </summary>
 		/// <param name="loopHead">Entry point of the loop.</param>
-		/// <param name="isSwitch">Whether to ignore branches that map to C# 'continue' statements.</param>
 		/// <param name="exitNodeArity">out: The number of different CFG nodes.
 		/// Possible values:
 		///  0 = no CFG nodes used as exit nodes (although edges leaving the block container might still be exits);
@@ -604,30 +618,6 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 		#endregion
 
 		/// <summary>
-		/// While our normal dominance logic ensures the loop has just a single reachable entry point,
-		/// it's possible that there are unreachable code blocks that have jumps into the loop.
-		/// We'll also include those into the loop.
-		/// 
-		/// Requires and maintains the invariant that a node is marked as visited iff it is contained in the loop.
-		/// </summary>
-		private void IncludeUnreachablePredecessors(List<ControlFlowNode> loop)
-		{
-			for (int i = 1; i < loop.Count; i++) {
-				Debug.Assert(loop[i].Visited);
-				foreach (var pred in loop[i].Predecessors) {
-					if (!pred.Visited) {
-						if (pred.IsReachable) {
-							Debug.Fail("All jumps into the loop body should go through the entry point");
-						} else {
-							pred.Visited = true;
-							loop.Add(pred);
-						}
-					}
-				}
-			}
-		}
-
-		/// <summary>
 		/// Move the blocks associated with the loop into a new block container.
 		/// </summary>
 		void ConstructLoop(List<ControlFlowNode> loop, ControlFlowNode exitPoint)
@@ -641,12 +631,12 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 			// Move contents of oldEntryPoint to newEntryPoint
 			// (we can't move the block itself because it might be the target of branch instructions outside the loop)
 			newEntryPoint.Instructions.ReplaceList(oldEntryPoint.Instructions);
-			newEntryPoint.ILRange = oldEntryPoint.ILRange;
+			newEntryPoint.AddILRange(oldEntryPoint);
 			oldEntryPoint.Instructions.ReplaceList(new[] { loopContainer });
 			if (exitTargetBlock != null)
 				oldEntryPoint.Instructions.Add(new Branch(exitTargetBlock));
 
-			loopContainer.ILRange = newEntryPoint.ILRange;
+			loopContainer.AddILRange(newEntryPoint);
 			MoveBlocksIntoContainer(loop, loopContainer);
 
 			// Rewrite branches within the loop from oldEntryPoint to newEntryPoint:
@@ -654,7 +644,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				if (branch.TargetBlock == oldEntryPoint) {
 					branch.TargetBlock = newEntryPoint;
 				} else if (branch.TargetBlock == exitTargetBlock) {
-					branch.ReplaceWith(new Leave(loopContainer) { ILRange = branch.ILRange });
+					branch.ReplaceWith(new Leave(loopContainer).WithILRange(branch));
 				}
 			}
 		}
@@ -709,7 +699,6 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				}
 				exitPoint = null;
 			}
-			IncludeUnreachablePredecessors(nodesInSwitch);
 
 			context.Step("Create BlockContainer for switch", switchInst);
 			// Sort blocks in the loop in reverse post-order to make the output look a bit nicer.
@@ -718,12 +707,12 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 			Debug.Assert(nodesInSwitch[0] == h);
 			foreach (var node in nodesInSwitch) {
 				node.Visited = false; // reset visited flag so that we can find outer loops
-				Debug.Assert(h.Dominates(node) || !node.IsReachable, "The switch body must be dominated by the switch head");
+				Debug.Assert(h.Dominates(node), "The switch body must be dominated by the switch head");
 			}
 
 			BlockContainer switchContainer = new BlockContainer(ContainerKind.Switch);
 			Block newEntryPoint = new Block();
-			newEntryPoint.ILRange = switchInst.ILRange;
+			newEntryPoint.AddILRange(switchInst);
 			switchContainer.Blocks.Add(newEntryPoint);
 			newEntryPoint.Instructions.Add(switchInst);
 			block.Instructions[block.Instructions.Count - 1] = switchContainer;
@@ -733,13 +722,13 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				block.Instructions.Add(new Branch(exitTargetBlock));
 			}
 			
-			switchContainer.ILRange = newEntryPoint.ILRange;
+			switchContainer.AddILRange(newEntryPoint);
 			MoveBlocksIntoContainer(nodesInSwitch, switchContainer);
 
 			// Rewrite branches within the loop from oldEntryPoint to newEntryPoint:
 			foreach (var branch in switchContainer.Descendants.OfType<Branch>()) {
 				if (branch.TargetBlock == exitTargetBlock) {
-					branch.ReplaceWith(new Leave(switchContainer) { ILRange = branch.ILRange });
+					branch.ReplaceWith(new Leave(switchContainer).WithILRange(branch));
 				}
 			}
 

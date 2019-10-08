@@ -137,7 +137,13 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 					writer.Space();
 					writer.WriteToken(Roles.Colon, ":");
 					writer.Space();
-					rt.AcceptVisitor(new CSharpOutputVisitor(writer, formattingPolicy));
+					if (symbol is IField f && CSharpDecompiler.IsFixedField(f, out var type, out int elementCount)) {
+						rt = astBuilder.ConvertType(type);
+						new IndexerExpression(new TypeReferenceExpression(rt), astBuilder.ConvertConstantValue(f.Compilation.FindType(KnownTypeCode.Int32), elementCount))
+							.AcceptVisitor(new CSharpOutputVisitor(writer, formattingPolicy));
+					} else {
+						rt.AcceptVisitor(new CSharpOutputVisitor(writer, formattingPolicy));
+					}
 				}
 			}
 
@@ -184,6 +190,7 @@ namespace ICSharpCode.Decompiler.CSharp.OutputVisitor
 		{
 			TypeSystemAstBuilder astBuilder = new TypeSystemAstBuilder();
 			astBuilder.AddTypeReferenceAnnotations = true;
+			astBuilder.ShowTypeParametersForUnboundTypes = true;
 			astBuilder.ShowModifiers = (ConversionFlags & ConversionFlags.ShowModifiers) == ConversionFlags.ShowModifiers;
 			astBuilder.ShowAccessibility = (ConversionFlags & ConversionFlags.ShowAccessibility) == ConversionFlags.ShowAccessibility;
 			astBuilder.AlwaysUseShortTypeNames = (ConversionFlags & ConversionFlags.UseFullyQualifiedTypeNames) != ConversionFlags.UseFullyQualifiedTypeNames;

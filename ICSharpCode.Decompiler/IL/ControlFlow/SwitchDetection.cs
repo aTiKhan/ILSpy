@@ -132,6 +132,8 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 		{
 			this.context = context;
 
+			analysis.AllowUnreachableCases = context.Settings.RemoveDeadCode;
+
 			foreach (var container in function.Descendants.OfType<BlockContainer>()) {
 				currentContainer = container;
 				controlFlowGraph = null;
@@ -158,13 +160,13 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 		void ProcessBlock(Block block, ref bool blockContainerNeedsCleanup)
 		{
 			bool analysisSuccess = analysis.AnalyzeBlock(block);
-			KeyValuePair<LongSet, ILInstruction> defaultSection;
-			if (analysisSuccess && UseCSharpSwitch(out defaultSection)) {
+			if (analysisSuccess && UseCSharpSwitch(out _)) {
 				// complex multi-block switch that can be combined into a single SwitchInstruction
 				ILInstruction switchValue = new LdLoc(analysis.SwitchVariable);
-				if (switchValue.ResultType == StackType.Unknown) {
+				Debug.Assert(switchValue.ResultType.IsIntegerType() || switchValue.ResultType == StackType.Unknown);
+				if (!(switchValue.ResultType == StackType.I4 || switchValue.ResultType == StackType.I8)) {
 					// switchValue must have a result type of either I4 or I8
-					switchValue = new Conv(switchValue, PrimitiveType.I8, false, TypeSystem.Sign.Signed);
+					switchValue = new Conv(switchValue, PrimitiveType.I8, false, Sign.Signed);
 				}
 				var sw = new SwitchInstruction(switchValue);
 				foreach (var section in analysis.Sections) {
@@ -180,7 +182,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 					// Remove branch/leave after if; it's getting moved into a section.
 					block.Instructions.RemoveAt(block.Instructions.Count - 1);
 				}
-				sw.ILRange = block.Instructions[block.Instructions.Count - 1].ILRange;
+				sw.AddILRange(block.Instructions[block.Instructions.Count - 1]);
 				block.Instructions[block.Instructions.Count - 1] = sw;
 				
 				// mark all inner blocks that were converted to the switch statement for deletion
@@ -317,7 +319,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 
 			// The switch has a single break target and there is one more hint
 			// The break target cannot be inlined, and should have the highest IL offset of everything targetted by the switch
-			return breakBlock.ILRange.Start >= analysis.Sections.Select(s => s.Value.MatchBranch(out var b) ? b.ILRange.Start : -1).Max();
+			return breakBlock.StartILOffset >= analysis.Sections.Select(s => s.Value.MatchBranch(out var b) ? b.StartILOffset : -1).Max();
 		}
 
 		/// <summary>
@@ -441,7 +443,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 		///   s   c
 		/// 
 		///  where:
-		///   p|n: if (a && b) goto c; goto s;
+		///   p|n: if (a &amp;&amp; b) goto c; goto s;
 		/// 
 		///  Note that if n has only 1 successor, but is still a flow node, then a short circuit expression 
 		///  has a target (c) with no corresponding block (leave)

@@ -36,7 +36,7 @@ namespace ICSharpCode.ILSpy
 	{
 		public FilterSettings(XElement element)
 		{
-			this.ShowApiLevel = (ApiVisibility?)(int?)element.Element("ShowAPILevel") ?? ApiVisibility.PublicOnly;
+			this.ShowApiLevel = (ApiVisibility?)(int?)element.Element("ShowAPILevel") ?? ApiVisibility.PublicAndInternal;
 			this.Language = Languages.GetLanguage((string)element.Element("Language"));
 			this.LanguageVersion = Language.LanguageVersions.FirstOrDefault(v => v.Version == (string)element.Element("LanguageVersion"));
 			if (this.LanguageVersion == default(LanguageVersion))
@@ -64,7 +64,7 @@ namespace ICSharpCode.ILSpy
 			set {
 				if (searchTerm != value) {
 					searchTerm = value;
-					OnPropertyChanged("SearchTerm");
+					OnPropertyChanged(nameof(SearchTerm));
 				}
 			}
 		}
@@ -89,34 +89,41 @@ namespace ICSharpCode.ILSpy
 			set {
 				if (showApiLevel != value) {
 					showApiLevel = value;
-					OnPropertyChanged("ShowApiLevel");
+					OnPropertyChanged(nameof(ShowApiLevel));
 				}
 			}
 		}
 
-		public bool ShowInternalApi {
-			get { return ShowApiLevel == ApiVisibility.PublicAndInternal; }
+		public bool ApiVisPublicOnly {
+			get { return showApiLevel == ApiVisibility.PublicOnly; }
 			set {
-				if (ShowApiLevel == ApiVisibility.PublicAndInternal) {
-					ShowApiLevel = ApiVisibility.PublicOnly;
-				} else {
-					ShowApiLevel = ApiVisibility.PublicAndInternal;
-				}
-				OnPropertyChanged("ShowInternalApi");
-				OnPropertyChanged("ShowAllApi");
+				if (value == (showApiLevel == ApiVisibility.PublicOnly)) return;
+				ShowApiLevel = ApiVisibility.PublicOnly;
+				OnPropertyChanged(nameof(ApiVisPublicOnly));
+				OnPropertyChanged(nameof(ApiVisPublicAndInternal));
+				OnPropertyChanged(nameof(ApiVisAll));
 			}
 		}
 
-		public bool ShowAllApi {
-			get { return ShowApiLevel == ApiVisibility.All; }
+		public bool ApiVisPublicAndInternal {
+			get { return showApiLevel == ApiVisibility.PublicAndInternal; }
 			set {
-				if (ShowApiLevel == ApiVisibility.All) {
-					ShowApiLevel = ApiVisibility.PublicOnly;
-				} else {
-					ShowApiLevel = ApiVisibility.All;
-				}
-				OnPropertyChanged("ShowInternalApi");
-				OnPropertyChanged("ShowAllApi");
+				if (value == (showApiLevel == ApiVisibility.PublicAndInternal)) return;
+				ShowApiLevel = ApiVisibility.PublicAndInternal;
+				OnPropertyChanged(nameof(ApiVisPublicOnly));
+				OnPropertyChanged(nameof(ApiVisPublicAndInternal));
+				OnPropertyChanged(nameof(ApiVisAll));
+			}
+		}
+
+		public bool ApiVisAll {
+			get { return showApiLevel == ApiVisibility.All; }
+			set {
+				if (value == (showApiLevel == ApiVisibility.All)) return;
+				ShowApiLevel = ApiVisibility.All;
+				OnPropertyChanged(nameof(ApiVisPublicOnly));
+				OnPropertyChanged(nameof(ApiVisPublicAndInternal));
+				OnPropertyChanged(nameof(ApiVisAll));
 			}
 		}
 
