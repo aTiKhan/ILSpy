@@ -269,6 +269,8 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 
 		internal static bool MethodRequiresCopyForReadonlyLValue(IMethod method)
 		{
+			if (method == null)
+				return true;
 			var type = method.DeclaringType;
 			if (type.IsReferenceType == true)
 				return false; // reference types are never implicitly copied
@@ -297,12 +299,20 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 				case OpCode.Call:
 				case OpCode.CallVirt:
 					method = ((CallInstruction)inst.Parent).Method;
-					if (method.IsAccessor && method.AccessorKind != MethodSemanticsAttributes.Getter) {
-						// C# doesn't allow calling setters on temporary structs
-						return false;
+					if (method.IsAccessor) {
+						if (method.AccessorKind == MethodSemanticsAttributes.Getter) {
+							// C# doesn't allow property compound assignments on temporary structs
+							return !(inst.Parent.Parent is CompoundAssignmentInstruction cai
+								&& cai.TargetKind == CompoundTargetKind.Property
+								&& cai.Target == inst.Parent);
+						} else {
+							// C# doesn't allow calling setters on temporary structs
+							return false;
+						}
 					}
 					return !method.IsStatic;
 				case OpCode.Await:
+					method = ((Await)inst.Parent).GetAwaiterMethod;
 					return true;
 				case OpCode.NullableUnwrap:
 					return ((NullableUnwrap)inst.Parent).RefInput;
@@ -449,7 +459,7 @@ namespace ICSharpCode.Decompiler.IL.Transforms
 					break;
 				case OpCode.DynamicCompoundAssign:
 					return true;
-				case OpCode.ArrayToPointer:
+				case OpCode.GetPinnableReference:
 				case OpCode.LocAllocSpan:
 					return true; // inline size-expressions into localloc.span
 				case OpCode.Call:

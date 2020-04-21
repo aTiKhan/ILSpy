@@ -194,9 +194,13 @@ namespace ICSharpCode.Decompiler.CSharp
 			TranslatedExpression target;
 			if (callOpCode == OpCode.NewObj) {
 				target = default(TranslatedExpression); // no target
-			} else if (method.IsLocalFunction && localFunction != null) {
-				target = new IdentifierExpression(localFunction.Name)
-					.WithoutILInstruction()
+			} else if (localFunction != null) {
+				var ide = new IdentifierExpression(localFunction.Name);
+				if (method.TypeArguments.Count > 0) {
+					int skipCount = localFunction.ReducedMethod.NumberOfCompilerGeneratedTypeParameters;
+					ide.TypeArguments.AddRange(method.TypeArguments.Skip(skipCount).Select(expressionBuilder.ConvertType));
+				}
+				target = ide.WithoutILInstruction()
 					.WithRR(ToMethodGroup(method, localFunction));
 			} else {
 				target = expressionBuilder.TranslateTarget(
@@ -225,7 +229,7 @@ namespace ICSharpCode.Decompiler.CSharp
 			var argumentList = BuildArgumentList(expectedTargetDetails, target.ResolveResult, method,
 				firstParamIndex, callArguments, argumentToParameterMap);
 
-			if (method.IsLocalFunction) {
+			if (localFunction != null) {
 				return new InvocationExpression(target, argumentList.GetArgumentExpressions())
 					.WithRR(new CSharpInvocationResolveResult(target.ResolveResult, method,
 						argumentList.GetArgumentResolveResults().ToList(), isExpandedForm: argumentList.IsExpandedForm));
@@ -989,6 +993,10 @@ namespace ICSharpCode.Decompiler.CSharp
 			foundMember = null;
 			bestCandidateIsExpandedForm = false;
 			var lookup = new MemberLookup(resolver.CurrentTypeDefinition, resolver.CurrentTypeDefinition.ParentModule);
+
+			Log.WriteLine("IsUnambiguousCall: Performing overload resolution for " + method);
+			Log.WriteCollection("  Arguments: ", arguments.Select(a => a.ResolveResult));
+
 			var or = new OverloadResolution(resolver.Compilation,
 				firstOptionalArgumentIndex < 0 ? arguments.SelectArray(a => a.ResolveResult) : arguments.Take(firstOptionalArgumentIndex).Select(a => a.ResolveResult).ToArray(),
 				argumentNames: firstOptionalArgumentIndex < 0 || argumentNames == null ? argumentNames : argumentNames.Take(firstOptionalArgumentIndex).ToArray(),
@@ -1043,6 +1051,9 @@ namespace ICSharpCode.Decompiler.CSharp
 		bool IsUnambiguousAccess(ExpectedTargetDetails expectedTargetDetails, ResolveResult target, IMethod method,
 			IList<TranslatedExpression> arguments, string[] argumentNames, out IMember foundMember)
 		{
+			Log.WriteLine("IsUnambiguousAccess: Performing overload resolution for " + method);
+			Log.WriteCollection("  Arguments: ", arguments.Select(a => a.ResolveResult));
+
 			foundMember = null;
 			if (target == null) {
 				var result = resolver.ResolveSimpleName(method.AccessorOwner.Name,
@@ -1246,6 +1257,10 @@ namespace ICSharpCode.Decompiler.CSharp
 
 		private bool CanUseDelegateConstruction(IMethod targetMethod, ILInstruction thisArg, IMethod invokeMethod)
 		{
+			// Accessors cannot be directly referenced as method group in C#
+			// see https://github.com/icsharpcode/ILSpy/issues/1741#issuecomment-540179101
+			if (targetMethod.IsAccessor)
+				return false;
 			if (targetMethod.IsStatic) {
 				// If the invoke method is known, we can compare the parameter counts to figure out whether the
 				// delegate is static or binds the first argument
@@ -1293,10 +1308,14 @@ namespace ICSharpCode.Decompiler.CSharp
 			// 2. add type arguments (represented as bit 1)
 			// 3. cast target (represented as bit 2)
 			int step;
+			ILFunction localFunction = null;
 			if (method.IsLocalFunction) {
-				step = 0;
+				localFunction = expressionBuilder.ResolveLocalFunction(method);
+				Debug.Assert(localFunction != null);
+			}
+			if (localFunction != null) {
+				step = 2;
 				requireTarget = false;
-				var localFunction = expressionBuilder.ResolveLocalFunction(method);
 				result = ToMethodGroup(method, localFunction);
 				target = default;
 				targetType = default;
@@ -1340,11 +1359,12 @@ namespace ICSharpCode.Decompiler.CSharp
 					memberDeclaringType: method.DeclaringType);
 				requireTarget = expressionBuilder.HidesVariableWithName(method.Name)
 					|| (method.IsStatic ? !expressionBuilder.IsCurrentOrContainingType(method.DeclaringTypeDefinition) : !(target.Expression is ThisReferenceExpression));
-
+				step = requireTarget ? 1 : 0;
 				var savedTarget = target;
-				for (step = requireTarget ? 1 : 0; step < 7; step++) {
+				for (; step < 7; step++) {
 					ResolveResult targetResolveResult;
-					if (!method.IsLocalFunction && (step & 1) != 0) {
+					//TODO: why there is an check for IsLocalFunction here, it should be unreachable in old code
+					if (localFunction == null && (step & 1) != 0) {
 						targetResolveResult = savedTarget.ResolveResult;
 						target = savedTarget;
 					} else {
@@ -1367,7 +1387,7 @@ namespace ICSharpCode.Decompiler.CSharp
 						break;
 				}
 			}
-			requireTarget = !method.IsLocalFunction && (step & 1) != 0;
+			requireTarget = localFunction == null && (step & 1) != 0;
 			ExpressionWithResolveResult targetExpression;
 			Debug.Assert(result != null);
 			if (requireTarget) {
@@ -1378,8 +1398,13 @@ namespace ICSharpCode.Decompiler.CSharp
 				targetExpression = mre.WithRR(result);
 			} else {
 				var ide = new IdentifierExpression(methodName);
-				if ((step & 2) != 0)
-					ide.TypeArguments.AddRange(method.TypeArguments.Select(expressionBuilder.ConvertType));
+				if ((step & 2) != 0) {
+					int skipCount = 0;
+					if (localFunction != null && method.TypeArguments.Count > 0) {
+						skipCount = localFunction.ReducedMethod.NumberOfCompilerGeneratedTypeParameters;
+					}
+					ide.TypeArguments.AddRange(method.TypeArguments.Skip(skipCount).Select(expressionBuilder.ConvertType));
+				}
 				targetExpression = ide.WithRR(result);
 			}
 			return targetExpression;
@@ -1400,6 +1425,8 @@ namespace ICSharpCode.Decompiler.CSharp
 
 		bool IsUnambiguousMethodReference(ExpectedTargetDetails expectedTargetDetails, IMethod method, ResolveResult target, IReadOnlyList<IType> typeArguments, out ResolveResult result)
 		{
+			Log.WriteLine("IsUnambiguousMethodReference: Performing overload resolution for " + method);
+
 			var lookup = new MemberLookup(resolver.CurrentTypeDefinition, resolver.CurrentTypeDefinition.ParentModule);
 			var or = new OverloadResolution(resolver.Compilation,
 				arguments: method.Parameters.SelectReadOnlyArray(p => new TypeResolveResult(p.Type)), // there are no arguments, use parameter types
@@ -1435,7 +1462,7 @@ namespace ICSharpCode.Decompiler.CSharp
 						method.DeclaringType,
 						new IParameterizedMember[] { method }
 					)
-				}, EmptyList<IType>.Instance
+				}, method.TypeArguments.Skip(localFunction.ReducedMethod.NumberOfCompilerGeneratedTypeParameters).ToArray()
 			);
 		}
 

@@ -55,6 +55,8 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 		UseRoslyn = 0x10,
 		UseMcs = 0x20,
 		ReferenceVisualBasic = 0x40,
+		ReferenceCore = 0x80,
+		GeneratePdb = 0x100,
 	}
 
 	[Flags]
@@ -89,12 +91,12 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 				outputFile += ".exe";
 				otherOptions += "/exe ";
 			}
-			
-			
+
+
 			if (options.HasFlag(AssemblerOptions.UseDebug)) {
 				otherOptions += "/debug ";
 			}
-			
+
 			ProcessStartInfo info = new ProcessStartInfo(ilasmPath);
 			info.Arguments = $"/nologo {otherOptions}/output=\"{outputFile}\" \"{sourceFileName}\"";
 			info.RedirectStandardError = true;
@@ -115,7 +117,7 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 
 			return outputFile;
 		}
-		
+
 		public static string Disassemble(string sourceFileName, string outputFile, AssemblerOptions asmOptions)
 		{
 			if (asmOptions.HasFlag(AssemblerOptions.UseOwnDisassembler)) {
@@ -141,7 +143,7 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 			}
 
 			string ildasmPath = SdkUtility.GetSdkPath("ildasm.exe");
-			
+
 			ProcessStartInfo info = new ProcessStartInfo(ildasmPath);
 			info.Arguments = $"/nobar /utf8 /out=\"{outputFile}\" \"{sourceFileName}\"";
 			info.RedirectStandardError = true;
@@ -182,8 +184,10 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 			return Regex.Replace(il, @"'<PrivateImplementationDetails>\{[0-9A-F-]+\}'", "'<PrivateImplementationDetails>'");
 		}
 
+		static readonly string coreRefAsmPath = new DotNetCorePathFinder(new Version(3, 1)).GetReferenceAssemblyPath(".NETCoreApp, Version = v3.1");
+		
 		static readonly string refAsmPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-				@"Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2");
+			@"Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2");
 		static readonly string thisAsmPath = Path.GetDirectoryName(typeof(Tester).Assembly.Location);
 
 		static readonly Lazy<IEnumerable<MetadataReference>> defaultReferences = new Lazy<IEnumerable<MetadataReference>>(delegate {
@@ -202,6 +206,21 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 			};
 		});
 
+		static readonly Lazy<IEnumerable<MetadataReference>> coreDefaultReferences = new Lazy<IEnumerable<MetadataReference>>(GetDefaultReferences);
+
+		const string targetFrameworkAttributeSnippet = @"
+
+[assembly: System.Runtime.Versioning.TargetFramework("".NETCoreApp, Version = v3.1"", FrameworkDisplayName = """")]
+
+";
+
+		static IEnumerable<MetadataReference> GetDefaultReferences()
+		{
+			foreach (var reference in Directory.EnumerateFiles(coreRefAsmPath, "*.dll")) {
+				yield return MetadataReference.CreateFromFile(reference);
+			}
+		}
+
 		static readonly Lazy<IEnumerable<MetadataReference>> visualBasic = new Lazy<IEnumerable<MetadataReference>>(delegate {
 			return new[] {
 				MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "Microsoft.VisualBasic.dll"))
@@ -216,6 +235,9 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 			}
 			if (flags.HasFlag(CompilerOptions.Optimize)) {
 				preprocessorSymbols.Add("OPT");
+			}
+			if (flags.HasFlag(CompilerOptions.ReferenceCore)) {
+				preprocessorSymbols.Add("NETCORE");
 			}
 			if (flags.HasFlag(CompilerOptions.UseRoslyn)) {
 				preprocessorSymbols.Add("ROSLYN");
@@ -251,8 +273,16 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 					preprocessorSymbols: preprocessorSymbols.ToArray(),
 					languageVersion: Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp8
 				);
-				var syntaxTrees = sourceFileNames.Select(f => SyntaxFactory.ParseSyntaxTree(File.ReadAllText(f), parseOptions, path: f));
-				var references = defaultReferences.Value;
+				var syntaxTrees = sourceFileNames.Select(f => SyntaxFactory.ParseSyntaxTree(File.ReadAllText(f), parseOptions, path: f, encoding: Encoding.UTF8));
+				if (flags.HasFlag(CompilerOptions.ReferenceCore)) {
+					syntaxTrees = syntaxTrees.Concat(new[] { SyntaxFactory.ParseSyntaxTree(targetFrameworkAttributeSnippet) });
+				}
+				IEnumerable<MetadataReference> references;
+				if (flags.HasFlag(CompilerOptions.ReferenceCore)) {
+					references = coreDefaultReferences.Value;
+				} else {
+					references = defaultReferences.Value;
+				}
 				if (flags.HasFlag(CompilerOptions.ReferenceVisualBasic)) {
 					references = references.Concat(visualBasic.Value);
 				}
@@ -267,7 +297,10 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 					));
 				CompilerResults results = new CompilerResults(new TempFileCollection());
 				results.PathToAssembly = outputFileName ?? Path.GetTempFileName();
-				var emitResult = compilation.Emit(results.PathToAssembly);
+				string pdbName = null;
+				if (flags.HasFlag(CompilerOptions.GeneratePdb))
+					pdbName = Path.ChangeExtension(outputFileName, ".pdb");
+				var emitResult = compilation.Emit(results.PathToAssembly, pdbName);
 				if (!emitResult.Success) {
 					StringBuilder b = new StringBuilder("Compiler error:");
 					foreach (var diag in emitResult.Diagnostics) {
@@ -331,7 +364,12 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 				CompilerParameters options = new CompilerParameters();
 				options.GenerateExecutable = !flags.HasFlag(CompilerOptions.Library);
 				options.CompilerOptions = "/unsafe /o" + (flags.HasFlag(CompilerOptions.Optimize) ? "+" : "-");
-				options.CompilerOptions += (flags.HasFlag(CompilerOptions.UseDebug) ? " /debug" : "");
+				string debugOption = " /debug";
+				if (flags.HasFlag(CompilerOptions.GeneratePdb)) {
+					debugOption += ":full";
+					options.IncludeDebugInformation = true;
+				}
+				options.CompilerOptions += (flags.HasFlag(CompilerOptions.UseDebug) ? debugOption : "");
 				options.CompilerOptions += (flags.HasFlag(CompilerOptions.Force32Bit) ? " /platform:anycpu32bitpreferred" : "");
 				if (preprocessorSymbols.Count > 0) {
 					options.CompilerOptions += " /d:" + string.Join(";", preprocessorSymbols);
@@ -339,7 +377,6 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 				if (outputFileName != null) {
 					options.OutputAssembly = outputFileName;
 				}
-
 				options.ReferencedAssemblies.Add("System.dll");
 				options.ReferencedAssemblies.Add("System.Core.dll");
 				options.ReferencedAssemblies.Add("System.Xml.dll");
@@ -368,7 +405,7 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 			}
 		}
 
-		public static void CompileCSharpWithPdb(string assemblyName, Dictionary<string, string> sourceFiles, PdbToXmlOptions options)
+		public static void CompileCSharpWithPdb(string assemblyName, Dictionary<string, string> sourceFiles)
 		{
 			var parseOptions = new CSharpParseOptions(languageVersion: Microsoft.CodeAnalysis.CSharp.LanguageVersion.Latest);
 
@@ -453,7 +490,11 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 				CSharpDecompiler decompiler = new CSharpDecompiler(typeSystem, settings);
 				decompiler.AstTransforms.Insert(0, new RemoveEmbeddedAttributes());
 				decompiler.AstTransforms.Insert(0, new RemoveCompilerAttribute());
+				decompiler.AstTransforms.Insert(0, new RemoveNamespaceMy());
 				decompiler.AstTransforms.Add(new EscapeInvalidIdentifiers());
+				var pdbFileName = Path.ChangeExtension(assemblyFileName, ".pdb");
+				if (File.Exists(pdbFileName))
+					decompiler.DebugInfoProvider = PdbProvider.DebugInfoUtils.FromFile(module, pdbFileName);
 				var syntaxTree = decompiler.DecompileWholeModuleAsSingleFile(sortTypes: true);
 
 				StringWriter output = new StringWriter();
@@ -466,16 +507,16 @@ namespace ICSharpCode.Decompiler.Tests.Helpers
 				return fileName;
 			}
 		}
-		
+
 		public static void RunAndCompareOutput(string testFileName, string outputFile, string decompiledOutputFile, string decompiledCodeFile = null)
 		{
 			string output1, output2, error1, error2;
 			int result1 = Tester.Run(outputFile, out output1, out error1);
 			int result2 = Tester.Run(decompiledOutputFile, out output2, out error2);
-			
+
 			Assert.AreEqual(0, result1, "Exit code != 0; did the test case crash?" + Environment.NewLine + error1);
 			Assert.AreEqual(0, result2, "Exit code != 0; did the decompiled code crash?" + Environment.NewLine + error2);
-			
+
 			if (output1 != output2 || error1 != error2) {
 				StringBuilder b = new StringBuilder();
 				b.AppendLine($"Test {testFileName} failed: output does not match.");

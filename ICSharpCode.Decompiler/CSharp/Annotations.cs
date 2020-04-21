@@ -41,8 +41,8 @@ namespace ICSharpCode.Decompiler.CSharp
 	/// <summary>
 	/// Currently unused; we'll probably use the LdToken ILInstruction as annotation instead when LdToken support gets reimplemented.
 	/// </summary>
-	public class LdTokenAnnotation {}
-	
+	public class LdTokenAnnotation { }
+
 	public static class AnnotationExtensions
 	{
 		internal static ExpressionWithILInstruction WithILInstruction(this Expression expression, ILInstruction instruction)
@@ -61,6 +61,24 @@ namespace ICSharpCode.Decompiler.CSharp
 		internal static ExpressionWithILInstruction WithoutILInstruction(this Expression expression)
 		{
 			return new ExpressionWithILInstruction(expression);
+		}
+
+		internal static TranslatedStatement WithILInstruction(this Statement statement, ILInstruction instruction)
+		{
+			statement.AddAnnotation(instruction);
+			return new TranslatedStatement(statement);
+		}
+
+		internal static TranslatedStatement WithILInstruction(this Statement statement, IEnumerable<ILInstruction> instructions)
+		{
+			foreach (var inst in instructions)
+				statement.AddAnnotation(inst);
+			return new TranslatedStatement(statement);
+		}
+
+		internal static TranslatedStatement WithoutILInstruction(this Statement statement)
+		{
+			return new TranslatedStatement(statement);
 		}
 
 		internal static TranslatedExpression WithILInstruction(this ExpressionWithResolveResult expression, ILInstruction instruction)
@@ -98,7 +116,7 @@ namespace ICSharpCode.Decompiler.CSharp
 			expression.Expression.AddAnnotation(resolveResult);
 			return new TranslatedExpression(expression, resolveResult);
 		}
-		
+
 		/// <summary>
 		/// Retrieves the <see cref="ISymbol"/> associated with this AstNode, or null if no symbol is associated with the node.
 		/// </summary>
@@ -137,8 +155,7 @@ namespace ICSharpCode.Decompiler.CSharp
 		/// </summary>
 		public static ILVariable GetILVariable(this IdentifierExpression expr)
 		{
-			var rr = expr.Annotation<ResolveResult>() as ILVariableResolveResult;
-			if (rr != null)
+			if (expr.Annotation<ResolveResult>() is ILVariableResolveResult rr)
 				return rr.Variable;
 			else
 				return null;
@@ -149,8 +166,7 @@ namespace ICSharpCode.Decompiler.CSharp
 		/// </summary>
 		public static ILVariable GetILVariable(this VariableInitializer vi)
 		{
-			var rr = vi.Annotation<ResolveResult>() as ILVariableResolveResult;
-			if (rr != null)
+			if (vi.Annotation<ResolveResult>() is ILVariableResolveResult rr)
 				return rr.Variable;
 			else
 				return null;
@@ -161,8 +177,7 @@ namespace ICSharpCode.Decompiler.CSharp
 		/// </summary>
 		public static ILVariable GetILVariable(this ForeachStatement loop)
 		{
-			var rr = loop.Annotation<ResolveResult>() as ILVariableResolveResult;
-			if (rr != null)
+			if (loop.Annotation<ResolveResult>() is ILVariableResolveResult rr)
 				return rr.Variable;
 			else
 				return null;
@@ -208,7 +223,7 @@ namespace ICSharpCode.Decompiler.CSharp
 			return node;
 		}
 	}
-	
+
 	/// <summary>
 	/// Represents a reference to a local variable.
 	/// </summary>
@@ -223,7 +238,7 @@ namespace ICSharpCode.Decompiler.CSharp
 
 		public ILVariableResolveResult(ILVariable v, IType type) : base(type)
 		{
-			this.Variable = v ?? throw new ArgumentNullException("v");
+			this.Variable = v ?? throw new ArgumentNullException(nameof(v));
 		}
 	}
 
@@ -269,6 +284,36 @@ namespace ICSharpCode.Decompiler.CSharp
 		public ImplicitConversionAnnotation(ConversionResolveResult conversionResolveResult)
 		{
 			this.ConversionResolveResult = conversionResolveResult;
+		}
+	}
+
+	/// <summary>
+	/// Annotates a QueryGroupClause with the ILFunctions of each (implicit lambda) expression.
+	/// </summary>
+	public class QueryGroupClauseAnnotation
+	{
+		public readonly ILFunction KeyLambda;
+		public readonly ILFunction ProjectionLambda;
+
+		public QueryGroupClauseAnnotation(ILFunction key, ILFunction projection)
+		{
+			this.KeyLambda = key;
+			this.ProjectionLambda = projection;
+		}
+	}
+
+	/// <summary>
+	/// Annotates a QueryJoinClause with the ILFunctions of each (implicit lambda) expression.
+	/// </summary>
+	public class QueryJoinClauseAnnotation
+	{
+		public readonly ILFunction OnLambda;
+		public readonly ILFunction EqualsLambda;
+
+		public QueryJoinClauseAnnotation(ILFunction on, ILFunction equals)
+		{
+			this.OnLambda = on;
+			this.EqualsLambda = equals;
 		}
 	}
 }

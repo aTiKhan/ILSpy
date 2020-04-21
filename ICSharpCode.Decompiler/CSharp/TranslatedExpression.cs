@@ -285,7 +285,8 @@ namespace ICSharpCode.Decompiler.CSharp
 			}
 			IType utype = NullableType.GetUnderlyingType(type);
 			IType targetUType = NullableType.GetUnderlyingType(targetType);
-			if (type.IsKnownType(KnownTypeCode.Boolean) && targetUType.GetStackType().IsIntegerType()) {
+			if (type.IsKnownType(KnownTypeCode.Boolean) && !targetUType.IsKnownType(KnownTypeCode.Boolean)
+				&& targetUType.GetStackType().IsIntegerType()) {
 				// convert from boolean to integer (or enum)
 				return new ConditionalExpression(
 					this.Expression,
@@ -430,8 +431,12 @@ namespace ICSharpCode.Decompiler.CSharp
 			}
 			var rr = expressionBuilder.resolver.WithCheckForOverflow(checkForOverflow).ResolveCast(targetType, ResolveResult);
 			if (rr.IsCompileTimeConstant && !rr.IsError) {
-				return expressionBuilder.ConvertConstantValue(rr, allowImplicitConversion)
+				var convertedResult = expressionBuilder.ConvertConstantValue(rr, allowImplicitConversion)
 					.WithILInstruction(this.ILInstructions);
+				if (convertedResult.Expression is PrimitiveExpression outputLiteral && this.Expression is PrimitiveExpression inputLiteral) {
+					outputLiteral.Format = inputLiteral.Format;
+				}
+				return convertedResult;
 			} else if (rr.IsError && targetType.IsReferenceType == true && type.IsReferenceType == true) {
 				// Conversion between two reference types, but no direct cast allowed? cast via object
 				// Just make sure we avoid infinite recursion even if the resolver falsely claims we can't cast directly:
@@ -486,7 +491,7 @@ namespace ICSharpCode.Decompiler.CSharp
 				return newTargetType.IsKnownType(KnownTypeCode.FormattableString)
 					|| newTargetType.IsKnownType(KnownTypeCode.IFormattable);
 			}
-			return oldTargetType.Equals(newTargetType);
+			return conversions.IdentityConversion(oldTargetType, newTargetType);
 		}
 		
 		TranslatedExpression LdcI4(ICompilation compilation, int val)

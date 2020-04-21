@@ -156,8 +156,8 @@
   <data name="OpenFrom_GAC" xml:space="preserve">
     <value>Open from _GAC...</value>
   </data>
-  <data name="Open_List" xml:space="preserve">
-    <value>Open _List...</value>
+  <data name="ManageAssembly_Lists" xml:space="preserve">
+    <value>Manage assembly _lists...</value>
   </data>
   <data name="ReloadAssemblies" xml:space="preserve">
     <value>Reload all assemblies</value>
@@ -426,7 +426,7 @@
   <data name="Create" xml:space="preserve">
     <value>Create</value>
   </data>
-  <data name="List" xml:space="preserve">
+  <data name="NewList" xml:space="preserve">
     <value>New list</value>
   </data>
   <data name="SelectAssembliesOpen" xml:space="preserve">
@@ -447,20 +447,17 @@
   <data name="Version" xml:space="preserve">
     <value>Version</value>
   </data>
-  <data name="Culture" xml:space="preserve">
-    <value>Culture</value>
-  </data>
   <data name="PublicToken" xml:space="preserve">
     <value>Public Key Token</value>
   </data>
-  <data name="OpenList" xml:space="preserve">
-    <value>Open List</value>
+  <data name="ManageAssemblyLists" xml:space="preserve">
+    <value>Manage Assembly Lists</value>
   </data>
   <data name="SelectList" xml:space="preserve">
     <value>Select a list:</value>
   </data>
-  <data name="_Create" xml:space="preserve">
-    <value>_Create</value>
+  <data name="_New" xml:space="preserve">
+    <value>_New</value>
   </data>
   <data name="OpenListDialog__Open" xml:space="preserve">
     <value>_Open</value>
@@ -768,5 +765,100 @@ Are you sure you want to continue?</value>
   </data>
   <data name="DecompileToNewPanel" xml:space="preserve">
     <value>Decompile to new tab</value>
+  </data>
+  <data name="DecompilerSettings.AsyncEnumerator" xml:space="preserve">
+    <value>Decompile async IAsyncEnumerator methods</value>
+  </data>
+  <data name="DecompilerSettings.ReadOnlyMethods" xml:space="preserve">
+    <value>Read-only methods</value>
+  </data>
+  <data name="DecompilerSettings.DetectAsyncUsingAndForeachStatements" xml:space="preserve">
+    <value>Detect awaited using and foreach statements</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Assemblies" xml:space="preserve">
+    <value>Assemblies</value>
+  </data>
+  <data name="Window_CloseAllDocuments" xml:space="preserve">
+    <value>Close all documents</value>
+  </data>
+  <data name="Window_ResetLayout" xml:space="preserve">
+    <value>Reset layout</value>
+  </data>
+  <data name="_Window" xml:space="preserve">
+    <value>_Window</value>
+  </data>
+  <data name="DecompilerSettings.UsePatternBasedFixedStatement" xml:space="preserve">
+    <value>Use pattern-based fixed statement</value>
+  </data>
+  <data name="DecompilerSettings.DoWhileStatement" xml:space="preserve">
+    <value>Transform to do-while, if possible.</value>
+  </data>
+  <data name="DecompilerSettings.ForStatement" xml:space="preserve">
+    <value>Transform to for, if possible.</value>
+  </data>
+  <data name="DecompilerSettings.SeparateLocalVariableDeclarations" xml:space="preserve">
+    <value>Separate local variable declarations and initializers (int x = 5; -&gt; int x; x = 5;), if possible.</value>
+  </data>
+  <data name="ResetToDefaults" xml:space="preserve">
+    <value>Reset to defaults</value>
+  </data>
+  <data name="ResetToDefaultsConfirmationMessage" xml:space="preserve">
+    <value>Do you really want to load the default settings for the active page?</value>
+  </data>
+  <data name="SelectAssemblyListDropdownTooltip" xml:space="preserve">
+    <value>Select a list of assemblies</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="C_lone" xml:space="preserve">
+    <value>C_lone</value>
+  </data>
+  <data name="ListDeleteConfirmation" xml:space="preserve">
+    <value>Are you sure that you want to delete the selected assembly list?</value>
+  </data>
+  <data name="ListExistsAlready" xml:space="preserve">
+    <value>A list with the same name was found.</value>
+  </data>
+  <data name="ListsResetConfirmation" xml:space="preserve">
+    <value>Are you sure that you want to remove all assembly lists and recreate the default assembly lists?</value>
+  </data>
+  <data name="DecompilerSettings.IntroduceStaticLocalFunctions" xml:space="preserve">
+    <value>Introduce static local functions</value>
+  </data>
+  <data name="HideEmptyMetadataTables" xml:space="preserve">
+    <value>Hide empty metadata tables from tree view</value>
+  </data>
+  <data name="NavigationFailed" xml:space="preserve">
+    <value>Navigation failed because the target is hidden or a compiler-generated class.\n
+Please disable all filters that might hide the item (i.e. activate "View &gt; Show internal types and members") and try again.</value>
+  </data>
+  <data name="AddShellIntegration" xml:space="preserve">
+    <value>Add shell integration</value>
+  </data>
+  <data name="AddShellIntegrationMessage" xml:space="preserve">
+    <value>This will add "{0}" to the registry at "HKCU\Software\Classes\dllfile\shell\Open with ILSpy\command" and "HKCU\Software\Classes\exefile\shell\Open with ILSpy\command" to allow opening .dll and .exe files from the Windows Explorer context menu.
+
+Do you want to continue?</value>
+  </data>
+  <data name="RemoveShellIntegration" xml:space="preserve">
+    <value>Remove shell integration</value>
+  </data>
+  <data name="RemoveShellIntegrationMessage" xml:space="preserve">
+    <value>This will remove "{0}" from the registry at "HKCU\Software\Classes\dllfile\shell\Open with ILSpy\command" and "HKCU\Software\Classes\exefile\shell\Open with ILSpy\command".
+
+Do you want to continue?</value>
+  </data>
+  <data name="AddPreconfiguredList" xml:space="preserve">
+    <value>Add preconfigured list...</value>
+  </data>
+  <data name="R_ename" xml:space="preserve">
+    <value>R_ename</value>
+  </data>
+  <data name="RenameList" xml:space="preserve">
+    <value>Rename list</value>
   </data>
 </root>

@@ -29,6 +29,13 @@ namespace ICSharpCode.ILSpy.Options
 	{
 		public DisplaySettings()
 		{
+			this.selectedFont = new FontFamily("Consolas");
+			this.selectedFontSize = 10.0 * 4 / 3;
+			this.sortResults = true;
+			this.indentationUseTabs = true;
+			this.indentationSize = 4;
+			this.indentationTabSize = 4;
+			this.highlightMatchingBraces = true;
 		}
 		
 		#region INotifyPropertyChanged implementation
@@ -227,6 +234,18 @@ namespace ICSharpCode.ILSpy.Options
 			}
 		}
 
+		bool hideEmptyMetadataTables = true;
+
+		public bool HideEmptyMetadataTables {
+			get { return hideEmptyMetadataTables; }
+			set {
+				if (hideEmptyMetadataTables != value) {
+					hideEmptyMetadataTables = value;
+					OnPropertyChanged();
+				}
+			}
+		}
+
 		public void CopyValues(DisplaySettings s)
 		{
 			this.SelectedFont = s.selectedFont;
@@ -244,6 +263,7 @@ namespace ICSharpCode.ILSpy.Options
 			this.IndentationTabSize = s.indentationTabSize;
 			this.IndentationSize = s.indentationSize;
 			this.HighlightMatchingBraces = s.highlightMatchingBraces;
+			this.HideEmptyMetadataTables = s.HideEmptyMetadataTables;
 		}
 	}
 }

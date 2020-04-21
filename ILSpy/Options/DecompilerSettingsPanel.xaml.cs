@@ -41,6 +41,11 @@ namespace ICSharpCode.ILSpy.Options
 
 		static Decompiler.DecompilerSettings currentDecompilerSettings;
 
+		internal static void TestSetup(Decompiler.DecompilerSettings settings)
+		{
+			currentDecompilerSettings = settings;
+		}
+
 		public static Decompiler.DecompilerSettings CurrentDecompilerSettings {
 			get {
 				return currentDecompilerSettings ?? (currentDecompilerSettings = LoadDecompilerSettings(ILSpySettings.Load()));
@@ -127,6 +132,12 @@ namespace ICSharpCode.ILSpy.Options
 		{
 			CheckBox checkBox = (CheckBox)sender;
 			checkBox.IsChecked = IsGroupChecked((CollectionViewGroup)checkBox.DataContext);
+		}
+
+		public void LoadDefaults()
+		{
+			currentDecompilerSettings = new Decompiler.DecompilerSettings();
+			this.DataContext = new DecompilerSettings(currentDecompilerSettings);
 		}
 	}
 

@@ -26,7 +26,9 @@ using System.Reflection.Metadata;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-
+using ICSharpCode.AvalonEdit.Document;
+using ICSharpCode.AvalonEdit.Highlighting;
+using ICSharpCode.AvalonEdit.Utils;
 using ICSharpCode.Decompiler;
 using ICSharpCode.Decompiler.CSharp;
 using ICSharpCode.Decompiler.CSharp.OutputVisitor;
@@ -298,7 +300,9 @@ namespace ICSharpCode.ILSpy
 			string line1 = Properties.Resources.WarningSomeAssemblyReference;
 			string line2 = Properties.Resources.PropertyManuallyMissingReferencesListLoadedAssemblies;
 			AddWarningMessage(module, output, line1, line2, Properties.Resources.ShowAssemblyLoad, Images.ViewCode, delegate {
-				MainWindow.Instance.SelectNode(MainWindow.Instance.FindTreeNode(module).Children.OfType<ReferenceFolderTreeNode>().First());
+				ILSpyTreeNode assemblyNode = MainWindow.Instance.FindTreeNode(module);
+				assemblyNode.EnsureLazyChildren();
+				MainWindow.Instance.SelectNode(assemblyNode.Children.OfType<ReferenceFolderTreeNode>().Single());
 			});
 		}
 
@@ -358,7 +362,7 @@ namespace ICSharpCode.ILSpy
 				base.DecompileAssembly(assembly, output, options);
 
 				// don't automatically load additional assemblies when an assembly node is selected in the tree view
-				using (options.FullDecompilation ? null : LoadedAssembly.DisableAssemblyLoad()) {
+				using (options.FullDecompilation ? null : LoadedAssembly.DisableAssemblyLoad(assembly.AssemblyList)) {
 					IAssemblyResolver assemblyResolver = assembly.GetAssemblyResolver();
 					var typeSystem = new DecompilerTypeSystem(module, assemblyResolver, options.DecompilerSettings);
 					var globalType = typeSystem.MainModule.TypeDefinitions.FirstOrDefault();
@@ -453,6 +457,9 @@ namespace ICSharpCode.ILSpy
 			CSharpAmbience ambience = new CSharpAmbience();
 			// Do not forget to update CSharpAmbienceTests.ILSpyMainTreeViewTypeFlags, if this ever changes.
 			ambience.ConversionFlags = ConversionFlags.ShowTypeParameterList | ConversionFlags.PlaceReturnTypeAfterParameterList;
+			if (new DecompilationOptions().DecompilerSettings.LiftNullables) {
+				ambience.ConversionFlags |= ConversionFlags.UseNullableSpecifierForValueTypes;
+			}
 			return ambience;
 		}
 
@@ -485,7 +492,7 @@ namespace ICSharpCode.ILSpy
 				// HACK : UnknownType is not supported by CSharpAmbience.
 			} else if (type.Kind == TypeKind.Unknown) {
 				return (includeNamespace ? type.FullName : type.Name)
-					+ (type.TypeParameterCount > 0 ? "<" + string.Join(",", type.TypeArguments.Select(t => t.Name)) + ">" : "");
+					+ (type.TypeParameterCount > 0 ? "<" + string.Join(", ", type.TypeArguments.Select(t => t.Name)) + ">" : "");
 			} else {
 				return ambience.ConvertType(type);
 			}
@@ -625,10 +632,20 @@ namespace ICSharpCode.ILSpy
 			return showAllMembers || !CSharpDecompiler.MemberIsHidden(assembly, member.MetadataToken, new DecompilationOptions().DecompilerSettings);
 		}
 
-		public override string GetTooltip(IEntity entity)
+		public override RichText GetRichTextTooltip(IEntity entity)
 		{
 			var flags = ConversionFlags.All & ~(ConversionFlags.ShowBody | ConversionFlags.PlaceReturnTypeAfterParameterList);
-			return new CSharpAmbience() { ConversionFlags = flags }.ConvertSymbol(entity);
+			var output = new StringWriter();
+			var decoratedWriter = new TextWriterTokenWriter(output);
+			var writer = new CSharpHighlightingTokenWriter(TokenWriter.InsertRequiredSpaces(decoratedWriter), locatable: decoratedWriter);
+			var settings = new DecompilationOptions().DecompilerSettings;
+			if (!settings.LiftNullables) {
+				flags &= ~ConversionFlags.UseNullableSpecifierForValueTypes;
+			}
+			new CSharpAmbience() {
+				ConversionFlags = flags,
+			}.ConvertSymbol(entity, writer, settings.CSharpFormattingOptions);
+			return new RichText(output.ToString(), writer.HighlightingModel);
 		}
 
 		public override CodeMappingInfo GetCodeMappingInfo(PEFile module, EntityHandle member)

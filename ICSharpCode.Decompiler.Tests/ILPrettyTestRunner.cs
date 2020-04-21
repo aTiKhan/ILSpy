@@ -95,6 +95,18 @@ namespace ICSharpCode.Decompiler.Tests
 		}
 
 		[Test]
+		public void Issue1918()
+		{
+			Run();
+		}
+
+		[Test]
+		public void Issue1922()
+		{
+			Run();
+		}
+
+		[Test]
 		public void FSharpUsing_Debug()
 		{
 			Run(settings: new DecompilerSettings { RemoveDeadStores = true });
@@ -196,6 +208,12 @@ namespace ICSharpCode.Decompiler.Tests
 		{
 			CopyFSharpCoreDll();
 			Run(settings: new DecompilerSettings { RemoveDeadStores = true });
+		}
+
+		[Test]
+		public void WeirdEnums()
+		{
+			Run();
 		}
 
 		void Run([CallerMemberName] string testName = null, DecompilerSettings settings = null)

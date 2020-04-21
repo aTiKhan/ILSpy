@@ -37,13 +37,17 @@ jobs:
   - checkout: self
     submodules: recursive
 
-  - task: DotNetCoreInstaller@0
+
+  - task: UseDotNet@2
+    displayName: 'Install .NET Core 3.1'
     inputs:
-      version: '3.0.100'
+      packageType: sdk
+      version: '3.1.100'
+      installationPath: $(Agent.ToolsDirectory)/dotnet
 
-  - powershell: .\BuildTools\pipelines-install.ps1
+  - script: pwsh .\BuildTools\pipelines-install.ps1
     displayName: Install
-
+    
   - task: MSBuild@1
     displayName: Restore ILSpy
     inputs:
@@ -59,7 +63,6 @@ jobs:
       msbuildArguments: /p:AppxPackageDir="$(Build.ArtifactStagingDirectory)\$(ReleaseChannel)\\" 
       configuration: $(BuildConfiguration)
       platform: $(BuildPlatform)
-      maximumCpuCount: true
 
   - task: VSTest@2
     displayName: Test
@@ -68,7 +71,7 @@ jobs:
       testAssemblyVer2: |
         ICSharpCode.Decompiler.Tests\bin\$(BuildConfiguration)\net472\ICSharpCode.Decompiler.Tests.exe
         ILSpy.Tests\bin\$(BuildConfiguration)\net472\ILSpy.Tests.exe
-        ILSpy.BamlDecompiler.Tests\bin\$(BuildConfiguration)\net472\ILSpy.BamlDecompiler.Tests.dll
+        ILSpy.BamlDecompiler.Tests\bin\$(BuildConfiguration)\net472\ILSpy.BamlDecompiler.Tests.exe
 
   - task: ArchiveFiles@1
     displayName: Create zip

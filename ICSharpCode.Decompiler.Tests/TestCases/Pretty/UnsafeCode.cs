@@ -65,6 +65,16 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 			}
 		}
 
+#if CS73
+		public class CustomPinnable
+		{
+			public ref int GetPinnableReference()
+			{
+				throw new NotImplementedException();
+			}
+		}
+#endif
+
 		public unsafe delegate void UnsafeDelegate(byte* ptr);
 
 		private UnsafeDelegate unsafeDelegate;
@@ -197,6 +207,16 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 			fixed (char* ptr = text) {
 			}
 		}
+
+#if !(LEGACY_CSC && OPT)
+		// legacy csc manages to optimize out the pinned variable altogether in this case;
+		// leaving no pinned region we could detect.
+		public unsafe void FixedArrayNoPointerUse(int[] arr)
+		{
+			fixed (int* ptr = arr) {
+			}
+		}
+#endif
 
 		public unsafe void PutDoubleIntoLongArray1(long[] array, int index, double val)
 		{
@@ -353,6 +373,29 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 		{
 			return ptr->ToString();
 		}
+
+		public unsafe void FixedMultiDimArray(int[,] arr)
+		{
+			fixed (int* ptr = arr) {
+				UsePointer(ptr);
+			}
+		}
+
+#if CS73
+		public unsafe void FixedSpan(Span<int> span)
+		{
+			fixed (int* ptr = span) {
+				UsePointer(ptr);
+			}
+		}
+
+		//public unsafe void FixedCustomReferenceType(CustomPinnable mem)
+		//{
+		//	fixed (int* ptr = mem) {
+		//		UsePointer(ptr);
+		//	}
+		//}
+#endif
 
 		public unsafe string StackAlloc(int count)
 		{

@@ -47,7 +47,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public TypeSystemAstBuilder(CSharpResolver resolver)
 		{
 			if (resolver == null)
-				throw new ArgumentNullException("resolver");
+				throw new ArgumentNullException(nameof(resolver));
 			this.resolver = resolver;
 			InitProperties();
 		}
@@ -64,7 +64,8 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		#region Properties
 		void InitProperties()
 		{
-			this.AlwaysUseBuiltinTypeNames = true;
+			this.UseKeywordsForBuiltinTypes = true;
+			this.UseNullableSpecifierForValueTypes = true;
 			this.ShowAccessibility = true;
 			this.ShowModifiers = true;
 			this.ShowBaseTypes = true;
@@ -78,82 +79,88 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		
 		/// <summary>
 		/// Specifies whether the ast builder should add annotations to type references.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool AddTypeReferenceAnnotations { get; set; }
 		
 		/// <summary>
 		/// Specifies whether the ast builder should add ResolveResult annotations to AST nodes.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool AddResolveResultAnnotations { get; set; }
 		
 		/// <summary>
 		/// Controls the accessibility modifiers are shown.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowAccessibility { get; set; }
 		
 		/// <summary>
 		/// Controls the non-accessibility modifiers are shown.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowModifiers { get; set; }
 		
 		/// <summary>
 		/// Controls whether base type references are shown.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowBaseTypes { get; set; }
 		
 		/// <summary>
 		/// Controls whether type parameter declarations are shown.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowTypeParameters { get; set; }
 
 		/// <summary>
 		/// Controls whether type parameter names are shown for unbound types.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool ShowTypeParametersForUnboundTypes { get; set; }
 		
 		/// <summary>
 		/// Controls whether constraints on type parameter declarations are shown.
 		/// Has no effect if ShowTypeParameters is false.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowTypeParameterConstraints { get; set; }
 		
 		/// <summary>
 		/// Controls whether the names of parameters are shown.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowParameterNames { get; set; }
 		
 		/// <summary>
 		/// Controls whether to show default values of optional parameters, and the values of constant fields.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool ShowConstantValues { get; set; }
 		
 		/// <summary>
 		/// Controls whether to show attributes.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool ShowAttributes { get; set; }
 
 		/// <summary>
 		/// Controls whether to use fully-qualified type names or short type names.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool AlwaysUseShortTypeNames { get; set; }
 
 		/// <summary>
-		/// Controls whether to use fully-qualified type names or short type names.
-		/// The default value is <c>true</c>.
+		/// Controls whether to use keywords for builtin types.
+		/// The default value is <see langword="true" />.
 		/// </summary>
-		public bool AlwaysUseBuiltinTypeNames { get; set; }
+		public bool UseKeywordsForBuiltinTypes { get; set; }
+
+		/// <summary>
+		/// Controls whether to use <c>T?</c> or <c>Nullable&lt;T&gt;</c> for nullable value types.
+		/// The default value is <see langword="true" />.
+		/// </summary>
+		public bool UseNullableSpecifierForValueTypes { get; set; }
 
 		/// <summary>
 		/// Determines the name lookup mode for converting a type name.
@@ -165,37 +172,37 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		
 		/// <summary>
 		/// Controls whether to generate a body that throws a <c>System.NotImplementedException</c>.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool GenerateBody { get; set; }
 		
 		/// <summary>
 		/// Controls whether to generate custom events.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool UseCustomEvents { get; set; }
 
 		/// <summary>
 		/// Controls whether unbound type argument names are inserted in the ast or not.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool ConvertUnboundTypeArguments { get; set;}
 
 		/// <summary>
 		/// Controls whether aliases should be used inside the type name or not.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool UseAliases { get; set; }
 
 		/// <summary>
 		/// Controls whether constants like <c>int.MaxValue</c> are converted to a <see cref="MemberReferenceExpression"/> or <see cref="PrimitiveExpression" />.
-		/// The default value is <c>true</c>.
+		/// The default value is <see langword="true" />.
 		/// </summary>
 		public bool UseSpecialConstants { get; set; }
 
 		/// <summary>
 		/// Controls whether integral constants should be printed in hexadecimal format.
-		/// The default value is <c>false</c>.
+		/// The default value is <see langword="false" />.
 		/// </summary>
 		public bool PrintIntegralValuesAsHex { get; set; }
 		#endregion
@@ -204,7 +211,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public AstType ConvertType(IType type)
 		{
 			if (type == null)
-				throw new ArgumentNullException("type");
+				throw new ArgumentNullException(nameof(type));
 			AstType astType = ConvertTypeHelper(type);
 			AddTypeAnnotation(astType, type);
 			return astType;
@@ -212,8 +219,6 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 
 		private void AddTypeAnnotation(AstType astType, IType type)
 		{
-			if (AddTypeReferenceAnnotations)
-				astType.AddAnnotation(type);
 			if (AddResolveResultAnnotations)
 				astType.AddAnnotation(new TypeResolveResult(type));
 		}
@@ -274,26 +279,32 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				return astType;
 			} else {
 				AstType astType;
-				if (type is ITypeDefinition typeDef) {
-					if (ShowTypeParametersForUnboundTypes) {
-						astType = ConvertTypeHelper(typeDef, typeDef.TypeArguments);
-					} else if (typeDef.TypeParameterCount > 0) {
-						// Unbound type
-						IType[] typeArguments = new IType[typeDef.TypeParameterCount];
-						for (int i = 0; i < typeArguments.Length; i++) {
-							typeArguments[i] = SpecialType.UnboundTypeArgument;
+				switch (type) {
+					case ITypeDefinition _:
+					case UnknownType _:
+						if (type.IsUnbound()) {
+							if (ShowTypeParametersForUnboundTypes) {
+								astType = ConvertTypeHelper(type, type.TypeArguments);
+							} else {
+								IType[] typeArguments = new IType[type.TypeParameterCount];
+								for (int i = 0; i < typeArguments.Length; i++) {
+									typeArguments[i] = SpecialType.UnboundTypeArgument;
+								}
+								astType = ConvertTypeHelper(type, typeArguments);
+							}
+						} else {
+							astType = ConvertTypeHelper(type, EmptyList<IType>.Instance);
 						}
-						astType = ConvertTypeHelper(typeDef, typeArguments);
-					} else {
-						astType = ConvertTypeHelper(typeDef, EmptyList<IType>.Instance);
-					}
-				} else if (type is ParameterizedType pt) {
-					if (AlwaysUseBuiltinTypeNames && pt.IsKnownType(KnownTypeCode.NullableOfT)) {
-						return ConvertType(pt.TypeArguments[0]).MakeNullableType();
-					}
-					astType = ConvertTypeHelper(pt.GenericType, pt.TypeArguments);
-				} else {
-					astType = MakeSimpleType(type.Name);
+						break;
+					case ParameterizedType pt:
+						if (UseNullableSpecifierForValueTypes && pt.IsKnownType(KnownTypeCode.NullableOfT)) {
+							return ConvertType(pt.TypeArguments[0]).MakeNullableType();
+						}
+						astType = ConvertTypeHelper(pt.GenericType, pt.TypeArguments);
+						break;
+					default:
+						astType = MakeSimpleType(type.Name);
+						break;
 				}
 				if (type.Nullability == Nullability.Nullable) {
 					AddTypeAnnotation(astType, type.ChangeNullability(Nullability.Oblivious));
@@ -309,7 +320,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			Debug.Assert(typeDef != null || genericType.Kind == TypeKind.Unknown);
 			Debug.Assert(typeArguments.Count >= genericType.TypeParameterCount);
 
-			if (AlwaysUseBuiltinTypeNames && typeDef != null) {
+			if (UseKeywordsForBuiltinTypes && typeDef != null) {
 				string keyword = KnownTypeReference.GetCSharpNameByTypeCode(typeDef.KnownTypeCode);
 				if (keyword != null) {
 					return new PrimitiveType(keyword);
@@ -564,14 +575,14 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			return attr;
 		}
 
-		private IEnumerable<AttributeSection> ConvertAttributes(IEnumerable<IAttribute> attibutes)
+		private IEnumerable<AttributeSection> ConvertAttributes(IEnumerable<IAttribute> attributes)
 		{
-			return attibutes.Select(a => new AttributeSection(ConvertAttribute(a)));
+			return attributes.Select(a => new AttributeSection(ConvertAttribute(a)));
 		}
 
-		private IEnumerable<AttributeSection> ConvertAttributes(IEnumerable<IAttribute> attibutes, string target)
+		private IEnumerable<AttributeSection> ConvertAttributes(IEnumerable<IAttribute> attributes, string target)
 		{
-			return attibutes.Select(a => new AttributeSection(ConvertAttribute(a)) {
+			return attributes.Select(a => new AttributeSection(ConvertAttribute(a)) {
 				AttributeTarget = target
 			});
 		}
@@ -581,7 +592,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public AstType ConvertAttributeType(IType type)
 		{
 			if (type == null)
-				throw new ArgumentNullException("type");
+				throw new ArgumentNullException(nameof(type));
 			AstType astType = ConvertTypeHelper(type);
 
 			string shortName = null;
@@ -665,7 +676,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public Expression ConvertConstantValue(ResolveResult rr)
 		{
 			if (rr == null)
-				throw new ArgumentNullException("rr");
+				throw new ArgumentNullException(nameof(rr));
 			bool isBoxing = false;
 			if (rr is ConversionResolveResult crr) {
 				// unpack ConversionResolveResult if necessary
@@ -736,7 +747,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public Expression ConvertConstantValue(IType expectedType, IType type, object constantValue)
 		{
 			if (type == null)
-				throw new ArgumentNullException("type");
+				throw new ArgumentNullException(nameof(type));
 			if (constantValue == null) {
 				if (type.IsReferenceType == true || type.IsKnownType(KnownTypeCode.NullableOfT)) {
 					var expr = new NullReferenceExpression();
@@ -780,11 +791,11 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 					constantValue = CSharpPrimitiveCast.Cast(TypeCode.Int32, constantValue, false);
 					literalType = type.GetDefinition().Compilation.FindType(KnownTypeCode.Int32);
 				}
-				string literalValue = null;
+				LiteralFormat format = LiteralFormat.None;
 				if (PrintIntegralValuesAsHex) {
-					literalValue = $"0x{constantValue:X}";
+					format = LiteralFormat.HexadecimalNumber;
 				}
-				expr = new PrimitiveExpression(constantValue, literalValue);
+				expr = new PrimitiveExpression(constantValue, format);
 				if (AddResolveResultAnnotations)
 					expr.AddAnnotation(new ConstantResolveResult(literalType, constantValue));
 				if (smallInteger && !type.Equals(expectedType)) {
@@ -1040,9 +1051,14 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				if (isDouble)
 					mathType = compilation.FindType(typeof(Math));
 				else {
-					mathType = compilation.FindType(new TopLevelTypeName("System", "MathF")).GetDefinition();
-					if (mathType == null || !mathType.GetFields(f => f.Name == "PI" && f.IsConst).Any() || !mathType.GetFields(f => f.Name == "E" && f.IsConst).Any())
+					mathType = compilation.FindType(new TopLevelTypeName("System", "MathF"));
+					var typeDef = mathType.GetDefinition();
+					if (typeDef == null
+						|| !typeDef.IsDirectImportOf(compilation.MainModule)
+						|| !typeDef.GetFields(f => f.Name == "PI" && f.IsConst).Any() || !typeDef.GetFields(f => f.Name == "E" && f.IsConst).Any())
+					{
 						mathType = compilation.FindType(typeof(Math));
+					}
 				}
 
 				expr = TryExtractExpression(mathType, type, constantValue, "PI", isDouble)
@@ -1250,7 +1266,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public ParameterDeclaration ConvertParameter(IParameter parameter)
 		{
 			if (parameter == null)
-				throw new ArgumentNullException("parameter");
+				throw new ArgumentNullException(nameof(parameter));
 			ParameterDeclaration decl = new ParameterDeclaration();
 			if (parameter.IsRef) {
 				decl.ParameterModifier = ParameterModifier.Ref;
@@ -1264,18 +1280,20 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			if (ShowAttributes) {
 				decl.Attributes.AddRange(ConvertAttributes(parameter.GetAttributes()));
 			}
+			IType parameterType;
 			if (parameter.Type.Kind == TypeKind.ByReference) {
 				// avoid 'out ref'
-				decl.Type = ConvertType(((ByReferenceType)parameter.Type).ElementType);
+				parameterType = ((ByReferenceType)parameter.Type).ElementType;
 			} else {
-				decl.Type = ConvertType(parameter.Type);
+				parameterType = parameter.Type;
 			}
+			decl.Type = ConvertType(parameterType);
 			if (this.ShowParameterNames) {
 				decl.Name = parameter.Name;
 			}
 			if (parameter.IsOptional && parameter.HasConstantValueInSignature && this.ShowConstantValues) {
 				try {
-					decl.DefaultExpression = ConvertConstantValue(parameter.Type, parameter.GetConstantValue(throwOnInvalidMetadata: true));
+					decl.DefaultExpression = ConvertConstantValue(parameterType, parameter.GetConstantValue(throwOnInvalidMetadata: true));
 				} catch (BadImageFormatException ex) {
 					decl.DefaultExpression = new ErrorExpression(ex.Message);
 				}
@@ -1288,7 +1306,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public AstNode ConvertSymbol(ISymbol symbol)
 		{
 			if (symbol == null)
-				throw new ArgumentNullException("symbol");
+				throw new ArgumentNullException(nameof(symbol));
 			switch (symbol.SymbolKind) {
 				case SymbolKind.Namespace:
 					return ConvertNamespaceDeclaration((INamespace)symbol);
@@ -1309,7 +1327,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		public EntityDeclaration ConvertEntity(IEntity entity)
 		{
 			if (entity == null)
-				throw new ArgumentNullException("entity");
+				throw new ArgumentNullException(nameof(entity));
 			switch (entity.SymbolKind) {
 				case SymbolKind.TypeDefinition:
 					return ConvertTypeDefinition((ITypeDefinition)entity);
@@ -1356,6 +1374,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			ClassType classType;
 			switch (typeDefinition.Kind) {
 				case TypeKind.Struct:
+				case TypeKind.Void:
 					classType = ClassType.Struct;
 					modifiers &= ~Modifiers.Sealed;
 					if (ShowModifiers) {
@@ -1408,13 +1427,19 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			
 			if (this.ShowBaseTypes) {
 				foreach (IType baseType in typeDefinition.DirectBaseTypes) {
-					if (baseType.IsKnownType (KnownTypeCode.Enum)) {
-						if (!typeDefinition.EnumUnderlyingType.IsKnownType (KnownTypeCode.Int32)) {
-							decl.BaseTypes.Add (ConvertType (typeDefinition.EnumUnderlyingType));
+					// if the declared type is an enum, replace all references to System.Enum with the enum-underlying type
+					if (typeDefinition.Kind == TypeKind.Enum && baseType.IsKnownType(KnownTypeCode.Enum)) {
+						if (!typeDefinition.EnumUnderlyingType.IsKnownType(KnownTypeCode.Int32)) {
+							decl.BaseTypes.Add(ConvertType(typeDefinition.EnumUnderlyingType));
 						}
-					} else if (!baseType.IsKnownType (KnownTypeCode.Object) &&
-						 !baseType.IsKnownType (KnownTypeCode.ValueType)) {
-						decl.BaseTypes.Add (ConvertType (baseType));
+					// if the declared type is a struct, ignore System.ValueType
+					} else if ((typeDefinition.Kind == TypeKind.Struct || typeDefinition.Kind == TypeKind.Void) && baseType.IsKnownType(KnownTypeCode.ValueType)) {
+						continue;
+					// always ignore System.Object
+					} else if (baseType.IsKnownType(KnownTypeCode.Object)) {
+						continue;
+					} else {
+						decl.BaseTypes.Add(ConvertType(baseType));
 					}
 				}
 			}
@@ -1549,6 +1574,9 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				decl.AddAnnotation(new MemberResolveResult(null, property));
 			}
 			decl.ReturnType = ConvertType(property.ReturnType);
+			if (property.ReturnTypeIsRefReadOnly && decl.ReturnType is ComposedType ct && ct.HasRefSpecifier) {
+				ct.HasReadOnlySpecifier = true;
+			}
 			decl.Name = property.Name;
 			decl.Getter = ConvertAccessor(property.Getter, property.Accessibility, false);
 			decl.Setter = ConvertAccessor(property.Setter, property.Accessibility, true);
@@ -1576,6 +1604,9 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				decl.AddAnnotation(new MemberResolveResult(null, indexer));
 			}
 			decl.ReturnType = ConvertType(indexer.ReturnType);
+			if (indexer.ReturnTypeIsRefReadOnly && decl.ReturnType is ComposedType ct && ct.HasRefSpecifier) {
+				ct.HasReadOnlySpecifier = true;
+			}
 			foreach (IParameter p in indexer.Parameters) {
 				decl.Parameters.Add(ConvertParameter(p));
 			}
@@ -1670,6 +1701,9 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			decl.Modifiers = GetMemberModifiers(op);
 			decl.OperatorType = opType.Value;
 			decl.ReturnType = ConvertType(op.ReturnType);
+			if (op.ReturnTypeIsRefReadOnly && decl.ReturnType is ComposedType ct && ct.HasRefSpecifier) {
+				ct.HasReadOnlySpecifier = true;
+			}
 			foreach (IParameter p in op.Parameters) {
 				decl.Parameters.Add(ConvertParameter(p));
 			}
@@ -1768,7 +1802,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 				} else {
 					var declaringType = member.DeclaringType;
 					if (declaringType.Kind == TypeKind.Interface) {
-						if (!member.IsVirtual && !member.IsAbstract && !member.IsOverride && member.Accessibility != Accessibility.Private)
+						if (!member.IsVirtual && !member.IsAbstract && !member.IsOverride && member.Accessibility != Accessibility.Private && member is IMethod method2 && method2.HasBody)
 							m |= Modifiers.Sealed;
 					} else {
 						if (member.IsAbstract)
@@ -1789,7 +1823,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 		#endregion
 		
 		#region Convert Type Parameter
-		TypeParameterDeclaration ConvertTypeParameter(ITypeParameter tp)
+		internal TypeParameterDeclaration ConvertTypeParameter(ITypeParameter tp)
 		{
 			TypeParameterDeclaration decl = new TypeParameterDeclaration();
 			decl.Variance = tp.Variance;
@@ -1799,7 +1833,7 @@ namespace ICSharpCode.Decompiler.CSharp.Syntax
 			return decl;
 		}
 		
-		Constraint ConvertTypeParameterConstraint(ITypeParameter tp)
+		internal Constraint ConvertTypeParameterConstraint(ITypeParameter tp)
 		{
 			if (!tp.HasDefaultConstructorConstraint && !tp.HasReferenceTypeConstraint && !tp.HasValueTypeConstraint && tp.NullabilityConstraint != Nullability.NotNullable && tp.DirectBaseTypes.All(IsObjectOrValueType)) {
 				return null;

@@ -16,37 +16,66 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Threading;
+using ICSharpCode.Decompiler.TypeSystem;
+using ICSharpCode.ILSpy.Docking;
 using ICSharpCode.ILSpy.Properties;
 using ICSharpCode.ILSpy.TextView;
 using ICSharpCode.ILSpy.TreeNodes;
 
 namespace ICSharpCode.ILSpy.Commands
 {
-	// [ExportContextMenuEntry(Header = nameof(Resources.DecompileToNewPanel), Icon = "images/Search", Category = nameof(Resources.Analyze), Order = 90)]
+	[ExportContextMenuEntry(Header = nameof(Resources.DecompileToNewPanel), Icon = "images/Search", Category = nameof(Resources.Analyze), Order = 90)]
 	internal sealed class DecompileInNewViewCommand : IContextMenuEntry
 	{
 		public bool IsVisible(TextViewContext context)
 		{
-			if (context.SelectedTreeNodes == null)
-				return false;
-			return true;			
+			return context.SelectedTreeNodes != null || context.Reference?.Reference is IEntity;
 		}
 
 		public bool IsEnabled(TextViewContext context)
 		{
-			if (context.SelectedTreeNodes == null)
-				return false;
-			return true;			
+			return GetNodes(context).Any();
 		}
 
-		public async void Execute(TextViewContext context)
+		public void Execute(TextViewContext context)
 		{
-			var dtv = new DecompilerTextView();
-			var nodes = context.SelectedTreeNodes.Cast<ILSpyTreeNode>().ToArray();
-			var title = string.Join(", ", nodes.Select(x => x.ToString()));
-			MainWindow.Instance.ShowInNewPane(title, dtv, PanePosition.Document);
-			await dtv.DecompileAsync(MainWindow.Instance.CurrentLanguage, nodes, new DecompilationOptions());
+			DecompileNodes(GetNodes(context).ToArray());
+		}
+
+		IEnumerable<ILSpyTreeNode> GetNodes(TextViewContext context)
+		{
+			if (context.SelectedTreeNodes != null) {
+				if (context.TreeView != MainWindow.Instance.AssemblyTreeView) {
+					return context.SelectedTreeNodes.OfType<IMemberTreeNode>().Select(FindTreeNode).Where(n => n != null);
+				} else {
+					return context.SelectedTreeNodes.OfType<ILSpyTreeNode>().Where(n => n != null);
+				}
+			} else if (context.Reference?.Reference is IEntity entity) {
+				if (MainWindow.Instance.FindTreeNode(entity) is ILSpyTreeNode node) {
+					return new[] { node };
+				}
+			}
+			return Array.Empty<ILSpyTreeNode>();
+
+			ILSpyTreeNode FindTreeNode(IMemberTreeNode node)
+			{
+				if (node is ILSpyTreeNode ilspyNode)
+					return ilspyNode;
+				return MainWindow.Instance.FindTreeNode(node.Member);
+			}
+		}
+
+		static void DecompileNodes(ILSpyTreeNode[] nodes)
+		{
+			if (nodes.Length == 0)
+				return;
+
+			MainWindow.Instance.SelectNodes(nodes, inNewTabPage: true);
+			MainWindow.Instance.Dispatcher.BeginInvoke(DispatcherPriority.Background, (Action)MainWindow.Instance.RefreshDecompiledView);
 		}
 	}
 }

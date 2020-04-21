@@ -46,7 +46,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				context.CancellationToken.ThrowIfCancellationRequested();
 
 				RemoveNopInstructions(block);
-				RemoveDeadStackStores(block, aggressive: context.Settings.RemoveDeadStores);
+				RemoveDeadStackStores(block, context);
 
 				InlineVariableInReturnBlock(block, context);
 				// 1st pass SimplifySwitchInstruction before SimplifyBranchChains()
@@ -70,13 +70,15 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 			block.Instructions.RemoveAll(inst => inst.OpCode == OpCode.Nop);
 		}
 
-		private void RemoveDeadStackStores(Block block, bool aggressive)
+		private static void RemoveDeadStackStores(Block block, ILTransformContext context)
 		{
+			bool aggressive = context.Settings.RemoveDeadStores;
 			// Previously copy propagation did this;
 			// ideally the ILReader would already do this,
 			// for now do this here (even though it's not control-flow related).
 			for (int i = block.Instructions.Count - 1; i >= 0; i--) {
 				if (block.Instructions[i] is StLoc stloc && stloc.Variable.IsSingleDefinition && stloc.Variable.LoadCount == 0 && stloc.Variable.Kind == VariableKind.StackSlot) {
+					context.Step($"Remove dead stack store {stloc.Variable.Name}", stloc);
 					if (aggressive ? SemanticHelper.IsPure(stloc.Value.Flags) : IsSimple(stloc.Value)) {
 						Debug.Assert(SemanticHelper.IsPure(stloc.Value.Flags));
 						block.Instructions.RemoveAt(i++);
@@ -164,7 +166,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 					context.Step("Replace branch to leave with leave", branch);
 					// Replace branches to 'leave' instruction with the leave instruction
 					var leave2 = leave.Clone();
-					if (!branch.HasILRange) // use the ILRange of the branch if possible
+					if (!branch.ILRangeIsEmpty) // use the ILRange of the branch if possible
 						leave2.AddILRange(branch);
 					branch.ReplaceWith(leave2);
 				}
@@ -195,9 +197,22 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 		bool IsBranchToReturnBlock(Branch branch)
 		{
 			var targetBlock = branch.TargetBlock;
-			if (targetBlock.Instructions.Count != 1 || targetBlock.FinalInstruction.OpCode != OpCode.Nop)
+			if (targetBlock.Instructions.Count != 1)
 				return false;
-			return targetBlock.Instructions[0].MatchReturn(out var value) && value is LdLoc;
+			if (!targetBlock.Instructions[0].MatchReturn(out var value))
+				return false;
+			if (!value.MatchLdLoc(out var returnVar))
+				return false;
+			var container = branch.TargetContainer;
+			for (ILInstruction inst = branch; inst != container; inst = inst.Parent) {
+				if (inst.Parent is TryFinally tryFinally && inst.SlotInfo == TryFinally.TryBlockSlot) {
+					// The branch will trigger the finally block.
+					// Moving the return block into the try is only possible if the finally block doesn't touch the return variable.
+					if (returnVar.IsUsedWithin(tryFinally.FinallyBlock))
+						return false;
+				}
+			}
+			return true;
 		}
 		
 		static bool CombineBlockWithNextBlock(BlockContainer container, Block block, ILTransformContext context)
@@ -219,7 +234,7 @@ namespace ICSharpCode.Decompiler.IL.ControlFlow
 				block.Instructions.RemoveRange(block.Instructions.Count - 3, 2);
 			}
 
-			if (block.HasILRange)
+			if (block.ILRangeIsEmpty)
 				block.AddILRange(targetBlock);
 
 			block.Instructions.Remove(br);

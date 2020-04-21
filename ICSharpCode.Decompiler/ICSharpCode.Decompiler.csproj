@@ -7,7 +7,7 @@
     <Description>IL decompiler engine</Description>
     <Company>ic#code</Company>
     <Product>ILSpy</Product>
-    <Copyright>Copyright 2011-2019 AlphaSierraPapa for the SharpDevelop Team</Copyright>
+    <Copyright>Copyright 2011-2020 AlphaSierraPapa for the SharpDevelop Team</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
     <GenerateAssemblyVersionAttribute>False</GenerateAssemblyVersionAttribute>
     <GenerateAssemblyFileVersionAttribute>False</GenerateAssemblyFileVersionAttribute>
@@ -51,7 +51,7 @@
     <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
     <PackageReference Include="System.Reflection.Metadata" Version="1.6.0" />
     <PackageReference Include="System.ValueTuple" Version="4.3.0" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0-beta2-19367-01">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -61,8 +61,14 @@
     <Compile Include="CSharp\Annotations.cs" />
     <Compile Include="CSharp\CallBuilder.cs" />
     <Compile Include="CSharp\CSharpLanguageVersion.cs" />
+    <Compile Include="CSharp\OutputVisitor\GenericGrammarAmbiguityVisitor.cs" />
     <Compile Include="CSharp\RequiredNamespaceCollector.cs" />
     <Compile Include="CSharp\SequencePointBuilder.cs" />
+    <Compile Include="CSharp\TranslatedStatement.cs" />
+    <Compile Include="DebugInfo\KnownGuids.cs" />
+    <Compile Include="Disassembler\DisassemblerSignatureTypeProvider.cs" />
+    <Compile Include="Documentation\XmlDocumentationElement.cs" />
+    <Compile Include="IL\ControlFlow\AwaitInFinallyTransform.cs" />
     <Compile Include="Solution\ProjectId.cs" />
     <Compile Include="Solution\ProjectItem.cs" />
     <Compile Include="Solution\SolutionCreator.cs" />
@@ -620,8 +626,11 @@
   </ItemGroup>
 
   <Target Name="ILSpyUpdateAssemblyInfo" BeforeTargets="BeforeBuild">
-    <PropertyGroup>
+    <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
       <UpdateAssemblyInfo>powershell -NoProfile -ExecutionPolicy Bypass -File BuildTools/update-assemblyinfo.ps1 $(Configuration)</UpdateAssemblyInfo>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
+      <UpdateAssemblyInfo>pwsh -NoProfile -ExecutionPolicy Bypass -File BuildTools/update-assemblyinfo.ps1 $(Configuration)</UpdateAssemblyInfo>
     </PropertyGroup>
     <Exec WorkingDirectory=".." Command="$(UpdateAssemblyInfo)" Timeout="60000" />
   </Target>

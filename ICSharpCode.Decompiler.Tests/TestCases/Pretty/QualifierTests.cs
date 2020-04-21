@@ -74,6 +74,17 @@ namespace ICSharpCode.Decompiler.Tests.Pretty
 			{
 
 			}
+
+			public string ThisQualifierWithCast()
+			{
+				return ((object)this).ToString();
+			}
+
+			public override string ToString()
+			{
+				// decompiled as return ((ValueType)this).ToString();
+				return base.ToString();
+			}
 		}
 
 		internal class Parent
@@ -128,8 +139,44 @@ namespace ICSharpCode.Decompiler.Tests.Pretty
 			}
 		}
 
+		private class i
+		{
+			public static void Test()
+			{
+			}
+		}
+
+		private class value
+		{
+			public static int item;
+
+			public static void Test()
+			{
+			}
+		}
+
 		private int fieldConflict;
 		private int innerConflict;
+
+		private static int PropertyValueParameterConflictsWithTypeName {
+			get {
+				return value.item;
+			}
+			set {
+				QualifierTests.value.item = value;
+			}
+		}
+
+		private int this[string[] Array] {
+			get {
+				System.Array.Sort(Array);
+				return 0;
+			}
+			set {
+				System.Array.Sort(Array);
+				QualifierTests.value.item = value;
+			}
+		}
 
 		private void NoParameters()
 		{
@@ -208,6 +255,23 @@ namespace ICSharpCode.Decompiler.Tests.Pretty
 		private void Delegate(Action<object> action)
 		{
 
+		}
+
+		private void ParameterConflictsWithTypeName(string[] Array)
+		{
+			System.Array.Sort(Array);
+		}
+
+		private void LocalConflictsWithTypeName()
+		{
+			for (int i = 0; i < 10; i++) {
+				QualifierTests.i.Test();
+			}
+		}
+
+		public QualifierTests(string[] Array)
+		{
+			System.Array.Sort(Array);
 		}
 	}
 

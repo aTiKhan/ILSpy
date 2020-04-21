@@ -60,18 +60,28 @@ namespace ICSharpCode.Decompiler.Metadata
 			"Microsoft.AspNetCore.All"
 		};
 
-		readonly Dictionary<string, DotNetCorePackageInfo> packages;
+		readonly DotNetCorePackageInfo[] packages;
 		ISet<string> packageBasePaths = new HashSet<string>(StringComparer.Ordinal);
-		readonly string assemblyName;
-		readonly string basePath;
 		readonly Version version;
 		readonly string dotnetBasePath = FindDotNetExeDirectory();
 
-		public DotNetCorePathFinder(string parentAssemblyFileName, string targetFrameworkId, Version version, ReferenceLoadInfo loadInfo = null)
+		public DotNetCorePathFinder(Version version)
 		{
-			this.assemblyName = Path.GetFileNameWithoutExtension(parentAssemblyFileName);
-			this.basePath = Path.GetDirectoryName(parentAssemblyFileName);
 			this.version = version;
+		}
+
+		public DotNetCorePathFinder(string parentAssemblyFileName, string targetFrameworkIdString, TargetFrameworkIdentifier targetFramework, Version version, ReferenceLoadInfo loadInfo = null)
+		{
+			string assemblyName = Path.GetFileNameWithoutExtension(parentAssemblyFileName);
+			string basePath = Path.GetDirectoryName(parentAssemblyFileName);
+			this.version = version;
+
+			if (targetFramework == TargetFrameworkIdentifier.NETStandard) {
+				// .NET Standard 2.1 is implemented by .NET Core 3.0 or higher
+				if (version.Major == 2 && version.Minor == 1) {
+					this.version = new Version(3, 0, 0);
+				}
+			}
 
 			var depsJsonFileName = Path.Combine(basePath, $"{assemblyName}.deps.json");
 			if (!File.Exists(depsJsonFileName)) {
@@ -79,13 +89,13 @@ namespace ICSharpCode.Decompiler.Metadata
 				return;
 			}
 
-			packages = LoadPackageInfos(depsJsonFileName, targetFrameworkId).ToDictionary(i => i.Name);
+			packages = LoadPackageInfos(depsJsonFileName, targetFrameworkIdString).ToArray();
 
 			foreach (var path in LookupPaths) {
-				foreach (var pk in packages) {
-					foreach (var item in pk.Value.RuntimeComponents) {
+				foreach (var p in packages) {
+					foreach (var item in p.RuntimeComponents) {
 						var itemPath = Path.GetDirectoryName(item);
-						var fullPath = Path.Combine(path, pk.Value.Name, pk.Value.Version, itemPath).ToLowerInvariant();
+						var fullPath = Path.Combine(path, p.Name, p.Version, itemPath).ToLowerInvariant();
 						if (Directory.Exists(fullPath))
 							packageBasePaths.Add(fullPath);
 					}
@@ -104,6 +114,25 @@ namespace ICSharpCode.Decompiler.Metadata
 			}
 
 			return FallbackToDotNetSharedDirectory(name, version);
+		}
+
+		internal string GetReferenceAssemblyPath(string targetFramework)
+		{
+			var (tfi, version) = UniversalAssemblyResolver.ParseTargetFramework(targetFramework);
+			string identifier, identifierExt;
+			switch (tfi) {
+				case TargetFrameworkIdentifier.NETCoreApp:
+					identifier = "Microsoft.NETCore.App";
+					identifierExt = "netcoreapp" + version.Major + "." + version.Minor;
+					break;
+				case TargetFrameworkIdentifier.NETStandard:
+					identifier = "NETStandard.Library";
+					identifierExt = "netstandard" + version.Major + "." + version.Minor;
+					break;
+				default:
+					throw new NotSupportedException();
+			}
+			return Path.Combine(dotnetBasePath, "packs", identifier + ".Ref", version.ToString(), "ref", identifierExt);
 		}
 
 		static IEnumerable<DotNetCorePackageInfo> LoadPackageInfos(string depsJsonFileName, string targetFramework)
@@ -135,6 +164,8 @@ namespace ICSharpCode.Decompiler.Metadata
 				return null;
 			var basePaths = RuntimePacks.Select(pack => Path.Combine(dotnetBasePath, "shared", pack));
 			foreach (var basePath in basePaths) {
+				if (!Directory.Exists(basePath))
+					continue;
 				var closestVersion = GetClosestVersionFolder(basePath, version);
 				if (File.Exists(Path.Combine(basePath, closestVersion, name.Name + ".dll"))) {
 					return Path.Combine(basePath, closestVersion, name.Name + ".dll");
@@ -175,7 +206,7 @@ namespace ICSharpCode.Decompiler.Metadata
 			}
 		}
 
-		static string FindDotNetExeDirectory()
+		public static string FindDotNetExeDirectory()
 		{
 			string dotnetExeName = (Environment.OSVersion.Platform == PlatformID.Unix) ? "dotnet" : "dotnet.exe";
 			foreach (var item in Environment.GetEnvironmentVariable("PATH").Split(Path.PathSeparator)) {

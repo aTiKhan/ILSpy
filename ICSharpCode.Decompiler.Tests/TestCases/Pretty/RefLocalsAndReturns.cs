@@ -62,6 +62,7 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 		public struct NormalStruct
 		{
 			private readonly int dummy;
+			private int[] arr;
 
 			public int Property {
 				get {
@@ -96,8 +97,17 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 				}
 			}
 
+			public ref int RefProperty => ref arr[0];
+			public ref readonly int RefReadonlyProperty => ref arr[0];
+			public readonly ref int ReadonlyRefProperty => ref arr[0];
+			public readonly ref readonly int ReadonlyRefReadonlyProperty => ref arr[0];
+#endif
+
+			public ref readonly int this[in int index] => ref arr[index];
+
 			public event EventHandler NormalEvent;
 
+#if CS80
 			public readonly event EventHandler ReadOnlyEvent {
 				add {
 				}
@@ -194,6 +204,18 @@ namespace ICSharpCode.Decompiler.Tests.TestCases.Pretty
 			// call on a copy, not the original ref:
 			ReadOnlyStruct readOnlyStruct = rs;
 			readOnlyStruct.Method();
+		}
+
+		public void M(in DateTime a = default(DateTime))
+		{
+		}
+
+		public void M2<T>(in T a = default(T))
+		{
+		}
+
+		public void M3<T>(in T? a = null) where T : struct
+		{
 		}
 
 		public static TReturn Invoker<T1, TReturn>(RefFunc<T1, TReturn> action, T1 value)

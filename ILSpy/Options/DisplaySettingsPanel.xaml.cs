@@ -115,6 +115,7 @@ namespace ICSharpCode.ILSpy.Options
 			s.IndentationSize = (int?)e.Attribute("IndentationSize") ?? 4;
 			s.IndentationTabSize = (int?)e.Attribute("IndentationTabSize") ?? 4;
 			s.HighlightMatchingBraces = (bool?)e.Attribute("HighlightMatchingBraces") ?? true;
+			s.HideEmptyMetadataTables = (bool?)e.Attribute("HideEmptyMetadataTables") ?? true;
 
 			return s;
 		}
@@ -134,10 +135,12 @@ namespace ICSharpCode.ILSpy.Options
 			section.SetAttributeValue("SortResults", s.SortResults);
 			section.SetAttributeValue("FoldBraces", s.FoldBraces);
 			section.SetAttributeValue("ExpandMemberDefinitions", s.ExpandMemberDefinitions);
+			section.SetAttributeValue("ExpandUsingDeclarations", s.ExpandUsingDeclarations);
 			section.SetAttributeValue("IndentationUseTabs", s.IndentationUseTabs);
 			section.SetAttributeValue("IndentationSize", s.IndentationSize);
 			section.SetAttributeValue("IndentationTabSize", s.IndentationTabSize);
 			section.SetAttributeValue("HighlightMatchingBraces", s.HighlightMatchingBraces);
+			section.SetAttributeValue("HideEmptyMetadataTables", s.HideEmptyMetadataTables);
 
 			XElement existingElement = root.Element("DisplaySettings");
 			if (existingElement != null)
@@ -162,6 +165,12 @@ namespace ICSharpCode.ILSpy.Options
 			var text = (string)e.SourceDataObject.GetData(DataFormats.UnicodeText, true) ?? string.Empty;
 			if (!text.All(char.IsDigit))
 				e.CancelCommand();
+		}
+
+		public void LoadDefaults()
+		{
+			currentDisplaySettings = new DisplaySettings();
+			this.DataContext = currentDisplaySettings;
 		}
 	}
 

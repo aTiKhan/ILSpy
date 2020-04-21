@@ -145,7 +145,7 @@ namespace ICSharpCode.Decompiler.TypeSystem.Implementation
 
 		Nullability LoadNullabilityConstraint()
 		{
-			if ((module.TypeSystemOptions & TypeSystemOptions.NullabilityAnnotations) == 0)
+			if (!module.ShouldDecodeNullableAttributes(Owner))
 				return Nullability.Oblivious;
 
 			var metadata = module.metadata;
@@ -230,7 +230,7 @@ namespace ICSharpCode.Decompiler.TypeSystem.Implementation
 
 		public override string ToString()
 		{
-			return $"{MetadataTokens.GetToken(handle):X8} Index={Index} Owner={Owner}";
+			return $"{MetadataTokens.GetToken(handle):X8} {ReflectionName}";
 		}
 	}
 }
