@@ -17,16 +17,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 using System.Linq;
-using ICSharpCode.Decompiler.TypeSystem;
+using System.Threading;
+
 using ICSharpCode.ILSpy.Properties;
 using ICSharpCode.ILSpy.TreeNodes;
-using System.Threading;
 namespace ICSharpCode.ILSpy
 {
+	using ICSharpCode.Decompiler.TypeSystem;
+
 	[ExportContextMenuEntry(Header = nameof(Resources.SearchMSDN), Icon = "images/SearchMsdn", Order = 9999)]
 	internal sealed class SearchMsdnContextMenuEntry : IContextMenuEntry
 	{
-		private static string msdnAddress = "http://msdn.microsoft.com/{1}/library/{0}";
+		private static string msdnAddress = "https://docs.microsoft.com/dotnet/api/{0}";
 
 		public bool IsVisible(TextViewContext context)
 		{
@@ -55,13 +57,13 @@ namespace ICSharpCode.ILSpy
 				if (node is EventTreeNode eventNode && (!eventNode.IsPublicAPI || !IsAccessible(eventNode.EventDefinition)))
 					return false;
 
-				if (node is FieldTreeNode fieldNode && (!fieldNode.IsPublicAPI || !IsAccessible(fieldNode.FieldDefinition)))
+				if (node is FieldTreeNode fieldNode && (!fieldNode.IsPublicAPI || !IsAccessible(fieldNode.FieldDefinition) || IsDelegateOrEnumMember(fieldNode.FieldDefinition)))
 					return false;
 
 				if (node is PropertyTreeNode propertyNode && (!propertyNode.IsPublicAPI || !IsAccessible(propertyNode.PropertyDefinition)))
 					return false;
 
-				if (node is MethodTreeNode methodNode && (!methodNode.IsPublicAPI || !IsAccessible(methodNode.MethodDefinition)))
+				if (node is MethodTreeNode methodNode && (!methodNode.IsPublicAPI || !IsAccessible(methodNode.MethodDefinition) || IsDelegateOrEnumMember(methodNode.MethodDefinition)))
 					return false;
 
 				if (node is NamespaceTreeNode namespaceNode && string.IsNullOrEmpty(namespaceNode.Name))
@@ -75,7 +77,8 @@ namespace ICSharpCode.ILSpy
 		{
 			if (entity.DeclaringTypeDefinition == null)
 				return false;
-			switch (entity.DeclaringTypeDefinition.Accessibility) {
+			switch (entity.DeclaringTypeDefinition.Accessibility)
+			{
 				case Accessibility.Public:
 				case Accessibility.Protected:
 				case Accessibility.ProtectedOrInternal:
@@ -85,10 +88,26 @@ namespace ICSharpCode.ILSpy
 			}
 		}
 
+		bool IsDelegateOrEnumMember(IMember member)
+		{
+			if (member.DeclaringTypeDefinition == null)
+				return false;
+			switch (member.DeclaringTypeDefinition.Kind)
+			{
+				case TypeKind.Delegate:
+				case TypeKind.Enum:
+					return true;
+				default:
+					return false;
+			}
+		}
+
 		public void Execute(TextViewContext context)
 		{
-			if (context.SelectedTreeNodes != null) {
-				foreach (ILSpyTreeNode node in context.SelectedTreeNodes) {
+			if (context.SelectedTreeNodes != null)
+			{
+				foreach (ILSpyTreeNode node in context.SelectedTreeNodes)
+				{
 					SearchMsdn(node);
 				}
 			}
@@ -98,20 +117,18 @@ namespace ICSharpCode.ILSpy
 		{
 			var address = string.Empty;
 
-			var namespaceNode = node as NamespaceTreeNode;
-			if (namespaceNode != null)
-				address = string.Format(msdnAddress, namespaceNode.Name,  Thread.CurrentThread.CurrentUICulture.Name);
-
-			if (node is IMemberTreeNode memberNode) {
+			if (node is NamespaceTreeNode namespaceNode)
+			{
+				address = string.Format(msdnAddress, namespaceNode.Name);
+			}
+			else if (node is IMemberTreeNode memberNode)
+			{
 				var member = memberNode.Member;
-				var memberName = string.Empty;
+				var memberName = member.ReflectionName.Replace('`', '-').Replace('+', '.');
+				if (memberName.EndsWith("..ctor", System.StringComparison.Ordinal))
+					memberName = memberName.Substring(0, memberName.Length - 5) + "-ctor";
 
-				if (member.DeclaringType == null)
-					memberName = member.FullName;
-				else
-					memberName = string.Format("{0}.{1}", member.DeclaringType.FullName, member.Name);
-
-				address = string.Format(msdnAddress, memberName, Thread.CurrentThread.CurrentUICulture.Name);
+				address = string.Format(msdnAddress, memberName);
 			}
 
 			address = address.ToLower();

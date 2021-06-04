@@ -13,6 +13,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using ICSharpCode.Decompiler.DebugInfo;
 using ICSharpCode.Decompiler.PdbProvider;
+using ICSharpCode.Decompiler.CSharp.ProjectDecompiler;
 // ReSharper disable All
 
 namespace ICSharpCode.Decompiler.Console
@@ -45,6 +46,9 @@ Remarks:
 
 		[Option("-il|--ilcode", "Show IL code.", CommandOptionType.NoValue)]
 		public bool ShowILCodeFlag { get; }
+
+		[Option("--il-sequence-points", "Show IL with sequence points. Implies -il.", CommandOptionType.NoValue)]
+		public bool ShowILSequencePointsFlag { get; }
 
 		[Option("-genpdb", "Generate PDB.", CommandOptionType.NoValue)]
 		public bool CreateDebugInfoFlag { get; }
@@ -89,7 +93,7 @@ Remarks:
 					}
 
 					return ListContent(InputAssemblyName, output, kinds);
-				} else if (ShowILCodeFlag) {
+				} else if (ShowILCodeFlag || ShowILSequencePointsFlag) {
 					if (outputDirectorySpecified) {
 						string outputName = Path.GetFileNameWithoutExtension(InputAssemblyName);
 						output = File.CreateText(Path.Combine(OutputDirectory, outputName) + ".il");
@@ -131,12 +135,13 @@ Remarks:
 			return 0;
 		}
 
-		DecompilerSettings GetSettings()
+		DecompilerSettings GetSettings(PEFile module)
 		{
 			return new DecompilerSettings(LanguageVersion) {
 				ThrowOnAssemblyResolveErrors = false,
 				RemoveDeadCode = RemoveDeadCode,
-				RemoveDeadStores = RemoveDeadStores
+				RemoveDeadStores = RemoveDeadStores,
+				UseSdkStyleProjectFormat = WholeProjectDecompiler.CanUseSdkStyleProjectFormat(module),
 			};
 		}
 
@@ -147,7 +152,7 @@ Remarks:
 			foreach (var path in ReferencePaths) {
 				resolver.AddSearchDirectory(path);
 			}
-			return new CSharpDecompiler(assemblyFileName, resolver, GetSettings()) {
+			return new CSharpDecompiler(assemblyFileName, resolver, GetSettings(module)) {
 				DebugInfoProvider = TryLoadPDB(module)
 			};
 		}
@@ -168,21 +173,23 @@ Remarks:
 		{
 			var module = new PEFile(assemblyFileName);
 			output.WriteLine($"// IL code: {module.Name}");
-			var disassembler = new ReflectionDisassembler(new PlainTextOutput(output), CancellationToken.None);
+			var disassembler = new ReflectionDisassembler(new PlainTextOutput(output), CancellationToken.None)
+			{
+				DebugInfo = TryLoadPDB(module),
+				ShowSequencePoints = ShowILSequencePointsFlag,
+			};
 			disassembler.WriteModuleContents(module);
 			return 0;
 		}
 
 		int DecompileAsProject(string assemblyFileName, string outputDirectory)
 		{
-			var decompiler = new WholeProjectDecompiler() { Settings = GetSettings() };
 			var module = new PEFile(assemblyFileName);
 			var resolver = new UniversalAssemblyResolver(assemblyFileName, false, module.Reader.DetectTargetFrameworkId());
 			foreach (var path in ReferencePaths) {
 				resolver.AddSearchDirectory(path);
 			}
-			decompiler.AssemblyResolver = resolver;
-			decompiler.DebugInfoProvider = TryLoadPDB(module);
+			var decompiler = new WholeProjectDecompiler(GetSettings(module), resolver, resolver, TryLoadPDB(module));
 			decompiler.DecompileProject(module, outputDirectory);
 			return 0;
 		}
@@ -214,7 +221,7 @@ Remarks:
 
 			using (FileStream stream = new FileStream(pdbFileName, FileMode.OpenOrCreate, FileAccess.Write)) {
 				var decompiler = GetDecompiler(assemblyFileName);
-				PortablePdbWriter.WritePdb(module, decompiler, GetSettings(), stream);
+				PortablePdbWriter.WritePdb(module, decompiler, GetSettings(module), stream);
 			}
 
 			return 0;
